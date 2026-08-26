@@ -195,18 +195,8 @@
   .portfolio-total{font-size:32px;font-weight:700;letter-spacing:-.01em;margin-top:6px}
 
   /* ---------- Detail screen ---------- */
-  .detail-topbar{position:sticky;top:0;z-index:5;background:rgba(14,22,33,.92);
-    backdrop-filter:blur(10px);border-bottom:1px solid var(--line-soft);
-    padding:10px 14px}
-  .backpill{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;
-    color:var(--text);background:var(--card);border:1px solid var(--line-soft);
-    border-radius:999px;padding:8px 14px;transition:transform .12s ease}
-  .backpill:active{transform:scale(.95)}
-  /* Telegram's own chrome already gives a back affordance (its native
-     BackButton, wired in JS below) inside the real app — our in-page pill
-     would just be a redundant second one there. Keep it for plain-browser
-     use, where Telegram's chrome doesn't exist. */
-  body.in-telegram .detail-topbar{display:none}
+  /* No in-page back button — Telegram's own native BackButton (wired in JS
+     below) is the only back affordance, so there's just one, not two. */
   .detail-content{padding:14px 14px 40px}
 
   /* Manually-curated full-screen backdrop (see content.js) — a fixed layer
@@ -439,17 +429,11 @@
   <!-- ===================== DETAIL SCREEN ===================== -->
   <div class="screen" id="screen-detail">
     <div class="detail-bg" id="detailBg" hidden></div>
-    <div class="detail-topbar">
-      <button class="backpill" onclick="showList()">‹ Back</button>
-    </div>
     <div class="detail-content" id="detailContent"></div>
   </div>
 
   <!-- ===================== PORTFOLIO SCREEN ===================== -->
   <div class="screen" id="screen-portfolio">
-    <div class="detail-topbar">
-      <button class="backpill" onclick="showList()">‹ Back</button>
-    </div>
     <div class="detail-content" id="portfolioContent"></div>
   </div>
   </div>
@@ -705,16 +689,22 @@
     }
     const hasTrustData = trustChips.length > 0 || top10 != null;
 
-    const iconLinks = [
-      iconLink(coin.website, "website", "Website"),
-      iconLink(coin.telegram ? `https://t.me/${coin.telegram}` : null, "telegram", "Telegram"),
-      iconLink(coin.twitter ? `https://x.com/${coin.twitter}` : null, "x", "X"),
-    ].filter(Boolean);
-
     // Manually-curated content (content.js) — see that file for the shape.
     // Nothing here is pulled from any API; a token with no entry just
     // renders the plain default page below.
     const content = (typeof TOKEN_CONTENT !== "undefined" && TOKEN_CONTENT[coin.tokenAddress]) || null;
+
+    // GeckoTerminal frequently has no socials at all for TON tokens — same
+    // gap as the trust fields — so a manually-set link in content.js fills
+    // in (or overrides) whatever the auto-pulled coin data is missing.
+    const website = content?.website || coin.website;
+    const telegram = content?.telegram || coin.telegram;
+    const twitter = content?.twitter || coin.twitter;
+    const iconLinks = [
+      iconLink(website, "website", "Website"),
+      iconLink(telegram ? `https://t.me/${telegram}` : null, "telegram", "Telegram"),
+      iconLink(twitter ? `https://x.com/${twitter}` : null, "x", "X"),
+    ].filter(Boolean);
 
     const bgEl = document.getElementById("detailBg");
     if (bgEl) {
@@ -741,9 +731,17 @@
         <div class="thesis-list">${content.theses.map(thesisCard).join("")}</div>
       </div>` : "";
 
+    // heroSpace is a fraction of the rendered width, not a fixed px value —
+    // the image itself scales with screen width (background-size:100%
+    // auto), so the space reserved for it needs to scale the same way or
+    // narrower/wider phones end up with a gap that's too big or too small.
+    const heroSpacePx = content?.hero
+      ? Math.round((Number(content.heroSpace) || 0.85) * (document.getElementById("screen-detail")?.clientWidth || window.innerWidth))
+      : 0;
+
     document.getElementById("detailContent").innerHTML = `
       ${content?.hero
-        ? `<div class="hero-space" style="height:${Number(content.heroSpace) || 380}px"></div>`
+        ? `<div class="hero-space" style="height:${heroSpacePx}px"></div>`
         : `<div class="tokhead">
              <div class="icon">${tokenIconHtml(coin)}</div>
              <div>

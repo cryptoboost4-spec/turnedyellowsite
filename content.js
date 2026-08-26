@@ -24,11 +24,24 @@
 //                 there's no visible seam and no fade back to the app's
 //                 normal dark theme — this token's whole page is themed to
 //                 its art. Only used when `hero` is set.
-//   heroSpace     Height in px of the image's own "header zone" (the part
-//                 with the logo/tagline/artwork) — the page's cards start
-//                 below this instead of covering it. Defaults to 380 if
-//                 omitted; tune it to match where your image's header
-//                 content actually ends. Only used when `hero` is set.
+//   heroSpace     How much of the image's own "header zone" (the part with
+//                 the logo/tagline/artwork) to reserve before the page's
+//                 cards start — as a FRACTION OF SCREEN WIDTH (not a fixed
+//                 px number), since the image itself scales with screen
+//                 width and the reserved space needs to scale the same way
+//                 or it'll drift on narrower/wider phones. To find the
+//                 right value: measure how far down your image (in its own
+//                 native pixels) the header content ends, divide by the
+//                 image's native width, e.g. content ends at 600px down a
+//                 704px-wide image → 600/704 ≈ 0.85. Defaults to 0.85 if
+//                 omitted. Only used when `hero` is set.
+//   website       Overrides/fills in the auto-pulled site link (full URL).
+//   telegram      Overrides/fills in the auto-pulled Telegram (handle only,
+//                 no @ or t.me/ — e.g. "utyacoin").
+//   twitter       Overrides/fills in the auto-pulled X/Twitter (handle
+//                 only, no @). GeckoTerminal frequently has none of these
+//                 three for TON tokens, same gap as the trust fields — set
+//                 them here to get the link pills showing at all.
 //   description   Replaces the auto-pulled GeckoTerminal description in the
 //                 About card. Unlike the auto one, this isn't truncated —
 //                 write as much as you want.
@@ -49,7 +62,10 @@
 //   "EQSomeRealTokenContractAddress...": {
 //     hero: "content/heroes/example.jpg",
 //     bgColor: "#7ec8f2",
-//     heroSpace: 380,
+//     heroSpace: 0.85,
+//     website: "https://example.com",
+//     telegram: "examplecoin",
+//     twitter: "examplecoin",
 //     description: "A longer, hand-written project description that " +
 //       "replaces the short auto-pulled one — background, team, plans, " +
 //       "whatever's worth telling people before they buy.",
@@ -70,6 +86,6 @@ const TOKEN_CONTENT = {
   "EQBaCgUwOoc6gHCNln_oJzb0mVs79YG7wYoavh-o1ItaneLA": {
     hero: "content/heroes/utya.jpg",
     bgColor: "#b8e6f6",
-    heroSpace: 345,
+    heroSpace: 0.86,
   },
 };
