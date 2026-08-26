@@ -8,11 +8,16 @@
 // all just renders the plain default page.
 //
 // Fields:
-//   hero          Full-bleed background image behind the token name (path
-//                 or URL, ~1200x600 recommended). Only ever shown for
-//                 tokens someone has actually designed one for — there is
-//                 no auto-generated/stretched-logo fallback on purpose.
-//   tagline       Short line overlaid at the top of the hero.
+//   hero          Full-page background image behind the whole screen (path
+//                 or URL) — fixed in place while the page scrolls, fading
+//                 into the app's normal dark background about 2/3 of the
+//                 way down so the stat/trust/buy cards stay legible.
+//                 Portrait images (~700x1400+) work best since they need
+//                 to fill the whole scrollable screen height, not just a
+//                 banner strip. Only ever shown for tokens someone has
+//                 actually designed one for — there is no auto-generated/
+//                 stretched-logo fallback on purpose.
+//   tagline       Short line shown under the token name when a hero is set.
 //   description   Replaces the auto-pulled GeckoTerminal description in the
 //                 About card. Unlike the auto one, this isn't truncated —
 //                 write as much as you want.
