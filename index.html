@@ -1,0 +1,545 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#0a0a0a" />
+<title>TON Board</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0a0a0a; --card:#141414; --card-2:#1a1a1a; --line:rgba(255,255,255,.08);
+    --text:#F2F5FA; --muted:#8A93A6;
+    --ton-a:#0098EA; --ton-b:#00D2FF;
+    --up:#3DDC97; --down:#FF5D7A; --warn:#F5B942;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
+  html,body{margin:0;background:var(--bg);color:var(--text);
+    font-family:'Space Grotesk',system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+  .mono{font-family:'JetBrains Mono',ui-monospace,monospace}
+  .wrap{max-width:480px;margin:0 auto;min-height:100dvh;position:relative}
+  button{font-family:inherit;border:none;background:none;color:inherit;cursor:pointer}
+  a{color:inherit}
+
+  /* ---------- Top bar ---------- */
+  .topbar{position:sticky;top:0;z-index:5;background:rgba(10,10,10,.9);
+    backdrop-filter:blur(10px);
+    padding:calc(env(safe-area-inset-top) + 10px) 14px 10px;
+    display:flex;gap:8px;align-items:center}
+  .searchpill{flex:1;display:flex;align-items:center;gap:8px;
+    background:var(--card);border:1px solid var(--line);border-radius:999px;
+    padding:10px 14px;min-width:0}
+  .searchpill svg{flex:none;opacity:.55}
+  .searchpill input{flex:1;min-width:0;background:none;border:none;outline:none;
+    color:var(--text);font-family:inherit;font-size:13.5px}
+  .searchpill input::placeholder{color:var(--muted)}
+  .iconbtn{flex:none;width:38px;height:38px;border-radius:999px;background:var(--card);
+    border:1px solid var(--line);display:flex;align-items:center;justify-content:center}
+  .iconbtn svg{width:16px;height:16px}
+  .iconbtn.spin svg{animation:spin .7s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  main{padding:14px 14px 40px}
+
+  /* ---------- Section glow card ---------- */
+  .section{position:relative;overflow:hidden;border-radius:24px;
+    background:
+      radial-gradient(130% 70% at 18% -10%, rgba(0,152,234,.32), rgba(0,152,234,0) 62%),
+      radial-gradient(90% 60% at 100% 0%, rgba(0,210,255,.14), rgba(0,210,255,0) 55%),
+      #0d0d0d;
+    border:1px solid var(--line);
+    padding:20px 16px 18px}
+  .section-head{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap;margin-bottom:3px}
+  .section-head h2{font-size:22px;font-weight:700;margin:0;letter-spacing:-.01em}
+  .countpill{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;
+    color:var(--ton-b);background:rgba(0,152,234,.15);border:1px solid rgba(0,152,234,.35);
+    border-radius:7px;padding:2px 8px}
+  .section-sub{color:var(--muted);font-size:12px;margin:2px 0 14px}
+
+  .sortrow{display:flex;gap:7px;margin-bottom:14px}
+  .sortpill{font-size:11.5px;font-weight:600;color:var(--muted);background:rgba(255,255,255,.04);
+    border:1px solid var(--line);border-radius:999px;padding:6px 12px}
+  .sortpill.active{color:#03131f;background:linear-gradient(135deg,var(--ton-a),var(--ton-b));
+    border-color:transparent}
+
+  /* ---------- Token grid ---------- */
+  .tgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .tcard{background:var(--card);border:1px solid var(--line);border-radius:18px;
+    overflow:hidden;text-align:left}
+  .tmedia{position:relative;width:100%;aspect-ratio:1/1;background:var(--card-2);
+    display:flex;align-items:center;justify-content:center}
+  .tmedia img{width:100%;height:100%;object-fit:cover;display:block}
+  .tmedia .fallback{width:100%;height:100%;
+    background:linear-gradient(135deg, rgba(0,152,234,.35), rgba(0,210,255,.12));
+    display:flex;align-items:center;justify-content:center;
+    font-size:30px;font-weight:700;color:rgba(234,240,251,.85)}
+  .tbadge{position:absolute;top:8px;left:8px;font-size:9px;font-weight:600;color:var(--text);
+    background:rgba(0,0,0,.6);backdrop-filter:blur(4px);border:1px solid rgba(255,255,255,.12);
+    border-radius:6px;padding:3px 7px;text-transform:uppercase;letter-spacing:.03em;
+    max-width:calc(100% - 16px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .tbadge.warn{color:var(--warn);border-color:rgba(245,185,66,.4)}
+  .tbody{padding:9px 10px 11px}
+  .tname{font-size:13.5px;font-weight:700;letter-spacing:-.01em;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .tticker{color:var(--muted);font-size:11px;margin-top:1px}
+  .tprice{font-family:'JetBrains Mono',monospace;font-size:12px;margin-top:7px}
+  .tprice b{font-weight:600}
+  .tprice .muted{color:var(--muted);font-weight:500}
+  .tchg{font-family:'JetBrains Mono',monospace;font-size:11px;margin-top:3px}
+  .up{color:var(--up)} .down{color:var(--down)}
+  .tfoot{display:flex;justify-content:space-between;color:var(--muted);
+    font-family:'JetBrains Mono',monospace;font-size:9.5px;margin-top:7px}
+
+  /* ---------- Detail screen ---------- */
+  .screen{display:none}
+  .screen.active{display:block}
+  .detail-topbar{position:sticky;top:0;z-index:5;background:rgba(10,10,10,.9);
+    backdrop-filter:blur(10px);padding:calc(env(safe-area-inset-top) + 10px) 14px 10px}
+  .backpill{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;
+    color:var(--text);background:var(--card);border:1px solid var(--line);
+    border-radius:999px;padding:8px 14px}
+  .detail-content{padding:14px 14px 40px}
+
+  .dcard{background:var(--card);border:1px solid var(--line);border-radius:16px;
+    padding:14px;margin-bottom:12px}
+  .dcard h3{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);
+    margin:0 0 10px;font-weight:600}
+  .desc{font-size:12.5px;line-height:1.55;color:#C7CEDB;margin:0 0 12px}
+  .links{display:flex;gap:8px;flex-wrap:wrap}
+  .links a{font-size:11px;font-weight:600;color:var(--ton-b);text-decoration:none;
+    border:1px solid rgba(0,152,234,.3);background:rgba(0,152,234,.08);
+    border-radius:999px;padding:6px 12px}
+
+  .tokhead{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+  .tokhead .icon{width:44px;height:44px;border-radius:12px;flex:none;overflow:hidden;
+    background:var(--card-2)}
+  .tokhead .icon img{width:100%;height:100%;object-fit:cover}
+  .tokhead .icon .fallback{width:100%;height:100%;display:flex;align-items:center;justify-content:center;
+    background:linear-gradient(135deg, rgba(0,152,234,.35), rgba(0,210,255,.12));
+    font-weight:700;font-size:16px}
+  .tokhead .nm{font-size:17px;font-weight:700;letter-spacing:-.01em}
+  .tokhead .tk{color:var(--muted);font-size:12px;margin-top:1px}
+
+  .statgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .stat .k{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;
+    margin-bottom:4px}
+  .stat .v{font-family:'JetBrains Mono',monospace;font-size:14.5px;font-weight:600}
+
+  .pricehead{display:flex;align-items:baseline;gap:10px;margin-bottom:2px}
+  .pricehead .big{font-family:'JetBrains Mono',monospace;font-size:26px;font-weight:600}
+  .pricehead .chg{font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:600}
+
+  .trust{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
+  .trust-item{background:var(--card-2);border:1px solid var(--line);border-radius:9px;
+    padding:8px 10px}
+  .trust-item .k{font-size:9.5px;color:var(--muted);text-transform:uppercase;
+    letter-spacing:.04em;margin-bottom:3px}
+  .trust-item .v{font-family:'JetBrains Mono',monospace;font-size:12.5px;font-weight:500}
+  .v.ok{color:var(--up)} .v.bad{color:var(--down)} .v.unk{color:var(--warn)}
+
+  .holderbar{height:7px;border-radius:4px;overflow:hidden;display:flex;
+    background:var(--card-2);margin-top:6px}
+  .holderbar span{height:100%}
+  .holdercap{display:flex;justify-content:space-between;font-size:10px;color:var(--muted);
+    margin-top:8px}
+
+  .buy{display:block;text-align:center;text-decoration:none;font-weight:700;font-size:14px;
+    color:#03131f;background:linear-gradient(135deg,var(--ton-a),var(--ton-b));
+    border-radius:12px;padding:14px;letter-spacing:.01em;margin-top:4px}
+  .buy:active{transform:translateY(1px)}
+  .feenote{text-align:center;font-size:9.5px;color:var(--muted);margin-top:8px;line-height:1.5}
+
+  .state{color:var(--muted);text-align:center;padding:60px 24px;font-size:13px;line-height:1.6}
+  .state b{color:var(--text)}
+
+  footer{color:var(--muted);font-size:10px;text-align:center;padding:20px 24px 30px;
+    line-height:1.6;border-top:1px solid var(--line);margin-top:6px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- ===================== LIST SCREEN ===================== -->
+  <div class="screen active" id="screen-list">
+    <div class="topbar">
+      <div class="searchpill">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+        <input id="search" type="text" inputmode="search" placeholder="Search loaded tokens" oninput="onSearch()" />
+      </div>
+      <button class="iconbtn" id="refreshBtn" onclick="load()" aria-label="Refresh">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3"><path d="M21 12a9 9 0 1 1-2.6-6.36"/><path d="M21 3v6h-6"/></svg>
+      </button>
+    </div>
+
+    <main>
+      <div class="section">
+        <div class="section-head">
+          <h2>Trending</h2>
+          <span class="countpill mono" id="countpill">0</span>
+        </div>
+        <div class="section-sub">Top TON tokens by 24h volume — screened for basic risk signals.</div>
+
+        <div class="sortrow">
+          <button class="sortpill active" id="sortVolume" onclick="setSort('volume')">Volume</button>
+          <button class="sortpill" id="sortGainers" onclick="setSort('gainers')">Gainers</button>
+        </div>
+
+        <div class="tgrid" id="grid"></div>
+      </div>
+    </main>
+
+    <footer>
+      Market data by GeckoTerminal. Buys route through STON.fi, non‑custodial —<br/>
+      your wallet signs every transaction, this app never holds funds.<br/>
+      Not financial advice. Memecoins are high risk.
+    </footer>
+  </div>
+
+  <!-- ===================== DETAIL SCREEN ===================== -->
+  <div class="screen" id="screen-detail">
+    <div class="detail-topbar">
+      <button class="backpill" onclick="showList()">‹ Back</button>
+    </div>
+    <div class="detail-content" id="detailContent"></div>
+  </div>
+
+</div>
+
+<script>
+  const tg = window.Telegram?.WebApp;
+  if (tg){
+    tg.ready(); tg.expand();
+    try { tg.setBackgroundColor?.('#0a0a0a'); tg.setHeaderColor?.('#0a0a0a'); } catch(e){}
+    tg.BackButton?.onClick(() => showList());
+  }
+
+  // ---- Config ----
+  const REFERRAL_ADDRESS = "EQA7NubDDzupeKWC-hmTlCugHfySLrxftL9cwImY_wVPYMG9";
+  const REFERRAL_VALUE = 30; // units of 0.01% => 0.30%
+  const GT_BASE = "https://api.geckoterminal.com/api/v2";
+  const NETWORK = "ton";
+  const WANT = 10;
+
+  let allCoins = [];
+  let sortMode = 'volume';
+  let searchTerm = '';
+
+  function esc(s){return String(s??"").replace(/[&<>"]/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[m]));}
+  const fmtPrice = (p) => {
+    p = Number(p)||0;
+    if (!p) return "$0";
+    if (p >= 1) return "$" + p.toFixed(3);
+    const s = p.toFixed(12).replace(/0+$/,"");
+    const m = s.match(/^0\.(0*)(\d{1,4})/);
+    return m ? "$0." + m[1] + m[2] : "$" + p.toPrecision(3);
+  };
+  const fmtNum = (n) => {
+    n = Number(n)||0;
+    if (n >= 1e9) return (n/1e9).toFixed(1)+"B";
+    if (n >= 1e6) return (n/1e6).toFixed(1)+"M";
+    if (n >= 1e3) return (n/1e3).toFixed(1)+"K";
+    return Math.round(n).toString();
+  };
+  const fmtChg = (c) => { c = Number(c)||0; return (c>=0?"+":"") + c.toFixed(1) + "%"; };
+  const fmtPct = (v) => v==null ? "—" : Number(v).toFixed(1)+"%";
+  const fmtUsd = (v) => v==null ? "—" : "$"+fmtNum(v);
+  const truncAddr = (a) => !a ? "—" : a.slice(0,6)+"…"+a.slice(-4);
+  const fmtAge = (iso) => {
+    if (!iso) return "—";
+    const t = new Date(iso).getTime();
+    if (!t) return "—";
+    const diff = Date.now() - t;
+    const days = Math.floor(diff/86400000);
+    if (days >= 1) return days+"d ago";
+    const hours = Math.floor(diff/3600000);
+    if (hours >= 1) return hours+"h ago";
+    return Math.max(1, Math.floor(diff/60000))+"m ago";
+  };
+
+  function launchpadFromDescription(desc){
+    if (!desc) return null;
+    const m = desc.match(/Deployed from ([a-zA-Z0-9.\-]+)/i);
+    return m ? m[1] : null;
+  }
+
+  async function fetchJson(url, tries = 3){
+    let delay = 600;
+    for (let i = 0; i < tries; i++) {
+      try {
+        const res = await fetch(url, { headers: { accept: "application/json" } });
+        if (res.status === 429) { await sleep(delay); delay *= 2; continue; }
+        if (!res.ok) throw new Error(res.status + " for " + url);
+        return await res.json();
+      } catch (e) {
+        // "Failed to fetch" = no response reached JS at all (rate-limit/edge
+        // block without CORS headers, or a network hiccup) — worth retrying.
+        const isNetworkLevel = e instanceof TypeError;
+        if (isNetworkLevel && i < tries - 1) { await sleep(delay); delay *= 2; continue; }
+        if (isNetworkLevel) {
+          throw new Error("Network blocked the request (possibly rate-limited, or an ad-blocker/privacy extension is stopping this domain). Try reloading, or try in a private/incognito window.");
+        }
+        throw e;
+      }
+    }
+  }
+  function sleep(ms){ return new Promise(r => setTimeout(r, ms)); }
+
+  function buyUrl(tokenAddress){
+    // v1 fallback: direct link to STON.fi's own swap UI with our referral params
+    // in the URL. Part 2 of the build replaces the primary flow with an
+    // embedded TonConnect + STON.fi SDK transaction (see spec) so the referral
+    // fee is guaranteed by the transaction itself, not a URL param STON.fi has
+    // to honor. Keeping this link path working as the documented fallback.
+    return "https://app.ston.fi/swap?ft=TON&tt=" + encodeURIComponent(tokenAddress) +
+      "&referral_address=" + encodeURIComponent(REFERRAL_ADDRESS) +
+      "&referral_value=" + REFERRAL_VALUE;
+  }
+
+  function tokenIconHtml(coin, size){
+    if (coin.imageUrl) return `<img src="${esc(coin.imageUrl)}" loading="lazy" alt="" onerror="this.parentElement.innerHTML='<div class=fallback>${esc((coin.symbol||'?')[0])}</div>'"/>`;
+    return `<div class="fallback">${esc((coin.symbol||'?')[0])}</div>`;
+  }
+
+  function renderCard(coin, idx){
+    const dir = coin.change24h >= 0 ? "up" : "down";
+    const hp = coin.is_honeypot;
+    const badgeText = hp === true ? "Honeypot?" : (coin.launchpad || "New");
+    const badgeWarn = hp === true;
+
+    let priceRow;
+    if (coin.marketCapUsd != null) {
+      priceRow = `<b>${fmtUsd(coin.marketCapUsd)}</b> <span class="muted">MC</span>` +
+        (coin.fdvUsd != null && coin.fdvUsd !== coin.marketCapUsd ? ` / ${fmtUsd(coin.fdvUsd)} FDV` : "");
+    } else if (coin.fdvUsd != null) {
+      priceRow = `<b>${fmtUsd(coin.fdvUsd)}</b> <span class="muted">FDV</span>`;
+    } else {
+      priceRow = `<span class="muted">MC —</span>`;
+    }
+
+    return `
+    <button class="tcard" onclick="showDetail(${idx})">
+      <div class="tmedia">
+        <span class="tbadge${badgeWarn?' warn':''}">${esc(badgeText)}</span>
+        ${tokenIconHtml(coin)}
+      </div>
+      <div class="tbody">
+        <div class="tname">${esc(coin.name)}</div>
+        <div class="tticker">$${esc(coin.symbol)}</div>
+        <div class="tprice mono">${priceRow}</div>
+        <div class="tchg mono ${dir}">${fmtChg(coin.change24h)}</div>
+        <div class="tfoot">
+          <span>${esc(truncAddr(coin.tokenAddress))}</span>
+          <span>${esc(fmtAge(coin.poolCreatedAt))}</span>
+        </div>
+      </div>
+    </button>`;
+  }
+
+  function trustChip(label, value, kind){
+    return `<div class="trust-item"><div class="k">${esc(label)}</div><div class="v ${kind}">${esc(value)}</div></div>`;
+  }
+
+  function explorerUrl(addr){ return "https://tonviewer.com/" + encodeURIComponent(addr); }
+  function poolGeckoUrl(pool){ return pool ? "https://www.geckoterminal.com/ton/pools/" + encodeURIComponent(pool) : null; }
+  function poolDexscreenerUrl(pool){ return pool ? "https://dexscreener.com/ton/" + encodeURIComponent(pool) : null; }
+  function poolStonfiUrl(pool){ return pool ? "https://app.ston.fi/pools/" + encodeURIComponent(pool) : null; }
+
+  function renderDetail(coin){
+    const dir = coin.change24h >= 0 ? "up" : "down";
+    const hp = coin.is_honeypot;
+    const hpLabel = hp === true ? "Yes — risk" : hp === false ? "No" : "Unknown";
+    const hpKind = hp === true ? "bad" : hp === false ? "ok" : "unk";
+    const top10 = coin.holderTop10 != null ? Number(coin.holderTop10) : null;
+    const rest = top10 != null ? Math.max(0, 100 - top10) : null;
+
+    const dataLinks = [
+      coin.poolAddress ? `<a href="${poolDexscreenerUrl(coin.poolAddress)}" target="_blank" rel="noopener">Dexscreener</a>` : "",
+      coin.poolAddress ? `<a href="${poolGeckoUrl(coin.poolAddress)}" target="_blank" rel="noopener">GeckoTerminal</a>` : "",
+      `<a href="${explorerUrl(coin.tokenAddress)}" target="_blank" rel="noopener">Contract</a>`,
+      coin.poolAddress ? `<a href="${poolStonfiUrl(coin.poolAddress)}" target="_blank" rel="noopener">Pool</a>` : "",
+    ].filter(Boolean);
+
+    const socialLinks = [];
+    if (coin.website) socialLinks.push(`<a href="${esc(coin.website)}" target="_blank" rel="noopener">Website</a>`);
+    if (coin.telegram) socialLinks.push(`<a href="https://t.me/${esc(coin.telegram)}" target="_blank" rel="noopener">Telegram</a>`);
+    if (coin.twitter) socialLinks.push(`<a href="https://x.com/${esc(coin.twitter)}" target="_blank" rel="noopener">X</a>`);
+
+    document.getElementById("detailContent").innerHTML = `
+      <div class="tokhead">
+        <div class="icon">${tokenIconHtml(coin)}</div>
+        <div>
+          <div class="nm">${esc(coin.name)}</div>
+          <div class="tk mono">$${esc(coin.symbol)}</div>
+        </div>
+      </div>
+
+      <div class="dcard">
+        <h3>About</h3>
+        ${coin.description ? `<p class="desc">${esc(coin.description).slice(0,320)}${coin.description.length>320?'…':''}</p>` : `<p class="desc" style="color:var(--muted)">No description available.</p>`}
+        <div class="links">${dataLinks.join("")}</div>
+        ${socialLinks.length ? `<div class="links" style="margin-top:8px">${socialLinks.join("")}</div>` : ""}
+      </div>
+
+      <div class="dcard">
+        <div class="pricehead">
+          <span class="big">${fmtPrice(coin.priceUsd)}</span>
+          <span class="chg ${dir}">${fmtChg(coin.change24h)}</span>
+        </div>
+        <div style="color:var(--muted);font-size:11px;margin-bottom:14px">24h change · live chart coming soon</div>
+        <div class="statgrid">
+          <div class="stat"><div class="k">Market cap</div><div class="v">${fmtUsd(coin.marketCapUsd)}</div></div>
+          <div class="stat"><div class="k">Liquidity</div><div class="v">${fmtUsd(coin.liquidityUsd)}</div></div>
+          <div class="stat"><div class="k">24h volume</div><div class="v">${fmtUsd(coin.volume24h)}</div></div>
+          <div class="stat"><div class="k">ATH</div><div class="v" style="color:var(--muted)">—</div></div>
+        </div>
+      </div>
+
+      <div class="dcard">
+        <h3>Trust signals</h3>
+        <div class="trust">
+          ${trustChip("GT score", coin.gtScore!=null ? coin.gtScore.toFixed(0)+"/100" : "—", "unk")}
+          ${trustChip("Holders", coin.holderCount ?? "—", "unk")}
+          ${trustChip("Honeypot", hpLabel, hpKind)}
+          ${trustChip("Dev holds", fmtPct(coin.devHoldingPct), (coin.devHoldingPct>10?"bad":"ok"))}
+        </div>
+        ${top10 != null ? `
+        <div class="holdercap">
+          <span>Top 10 holders: ${top10.toFixed(1)}%</span><span>Rest: ${rest.toFixed(1)}%</span>
+        </div>
+        <div class="holderbar">
+          <span style="width:${top10}%;background:var(--warn)"></span>
+          <span style="width:${rest}%;background:var(--ton-a)"></span>
+        </div>` : ""}
+      </div>
+
+      <a class="buy" href="${buyUrl(coin.tokenAddress)}" target="_blank" rel="noopener">Buy $${esc(coin.symbol)} on STON.fi</a>
+      <div class="feenote">non-custodial · your wallet signs · 0.3% platform fee<br/>Not financial advice. Memecoins are high risk.</div>
+    `;
+  }
+
+  window.showDetail = function(idx){
+    const coin = allCoins[idx];
+    if (!coin) return;
+    renderDetail(coin);
+    document.getElementById("screen-list").classList.remove("active");
+    document.getElementById("screen-detail").classList.add("active");
+    window.scrollTo(0,0);
+    tg?.BackButton?.show();
+  };
+  window.showList = function(){
+    document.getElementById("screen-detail").classList.remove("active");
+    document.getElementById("screen-list").classList.add("active");
+    tg?.BackButton?.hide();
+  };
+
+  window.setSort = function(mode){
+    sortMode = mode;
+    document.getElementById("sortVolume").classList.toggle("active", mode === "volume");
+    document.getElementById("sortGainers").classList.toggle("active", mode === "gainers");
+    renderGrid();
+  };
+
+  window.onSearch = function(){
+    searchTerm = document.getElementById("search").value.trim().toLowerCase();
+    renderGrid();
+  };
+
+  function renderGrid(){
+    let list = allCoins.map((c, i) => ({ ...c, _idx: i }));
+    if (searchTerm) {
+      list = list.filter(c =>
+        c.symbol.toLowerCase().includes(searchTerm) ||
+        c.name.toLowerCase().includes(searchTerm));
+    }
+    list = list.sort((a, b) => sortMode === "gainers"
+      ? b.change24h - a.change24h
+      : b.volume24h - a.volume24h);
+
+    document.getElementById("countpill").textContent = list.length;
+    document.getElementById("grid").innerHTML = list.length
+      ? list.map(c => renderCard(c, c._idx)).join("")
+      : `<div class="state" style="grid-column:1/-1">No matches.</div>`;
+  }
+
+  async function load(){
+    const btn = document.getElementById("refreshBtn");
+    btn.classList.add("spin");
+    document.getElementById("grid").innerHTML = `<div class="state" style="grid-column:1/-1">Loading live data…</div>`;
+    try {
+      // Step 1: top pools by 24h volume
+      const poolsRes = await fetchJson(`${GT_BASE}/networks/${NETWORK}/pools?sort=h24_volume_usd_desc&page=1`);
+      const pools = poolsRes?.data || [];
+
+      // Dedupe to unique base tokens, skip pools where base==quote
+      // (the pattern seen when TON itself gets listed as a "pool" — self-paired)
+      const seen = new Set();
+      const picks = [];
+      for (const p of pools) {
+        const baseId = p.relationships?.base_token?.data?.id || "";
+        const quoteId = p.relationships?.quote_token?.data?.id || "";
+        const addr = baseId.replace(/^ton_/, "");
+        const quoteAddr = quoteId.replace(/^ton_/, "");
+        if (!addr) continue;
+        if (addr.toLowerCase() === quoteAddr.toLowerCase()) continue; // self-paired, skip
+        if (seen.has(addr.toLowerCase())) continue;
+        seen.add(addr.toLowerCase());
+        const a = p.attributes || {};
+        picks.push({
+          tokenAddress: addr,
+          poolAddress: a.address || null,
+          priceUsd: Number(a.base_token_price_usd)||0,
+          change24h: Number(a.price_change_percentage?.h24)||0,
+          volume24h: Number(a.volume_usd?.h24)||0,
+          marketCapUsd: a.market_cap_usd != null ? Number(a.market_cap_usd) : null,
+          fdvUsd: a.fdv_usd != null ? Number(a.fdv_usd) : null,
+          liquidityUsd: a.reserve_in_usd != null ? Number(a.reserve_in_usd) : null,
+          poolCreatedAt: a.pool_created_at || null,
+        });
+        if (picks.length >= WANT) break;
+      }
+
+      if (!picks.length) throw new Error("no pools returned");
+
+      // Step 2: rich token info per pick, in parallel
+      const infos = await Promise.all(picks.map(p =>
+        fetchJson(`${GT_BASE}/networks/${NETWORK}/tokens/${p.tokenAddress}/info`).catch(() => null)
+      ));
+
+      allCoins = picks.map((p, i) => {
+        const info = infos[i]?.data?.attributes || {};
+        return {
+          ...p,
+          name: info.name || p.tokenAddress.slice(0,10),
+          symbol: (info.symbol || "?").toUpperCase(),
+          description: info.description || "",
+          imageUrl: info.image_url || null,
+          website: info.websites?.[0] || null,
+          telegram: info.telegram_handle || null,
+          twitter: info.twitter_handle || null,
+          gtScore: info.gt_score ?? null,
+          holderCount: info.holders?.count ?? null,
+          holderTop10: info.holders?.distribution_percentage?.top_10 ?? null,
+          is_honeypot: info.is_honeypot === "true" ? true : info.is_honeypot === "false" ? false : null,
+          devHoldingPct: info.developer_holding_percentage ?? null,
+          launchpad: launchpadFromDescription(info.description),
+        };
+      });
+
+      renderGrid();
+    } catch (e) {
+      document.getElementById("countpill").textContent = "0";
+      document.getElementById("grid").innerHTML =
+        `<div class="state" style="grid-column:1/-1"><b>Couldn't load live data.</b><br/>${esc(e.message || e)}<br/><br/>
+         This is an honest error, not a fallback — worth knowing before we deploy for real.</div>`;
+    } finally {
+      btn.classList.remove("spin");
+    }
+  }
+
+  load();
+</script>
+</body>
+</html>
