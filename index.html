@@ -273,7 +273,7 @@
     font-weight:700;font-size:16px}
   .tokhead .nm{font-size:17px;font-weight:700;letter-spacing:-.01em}
   .tokhead .tk{color:var(--muted);font-size:12px;margin-top:1px}
-  .metarow{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:2px 0 14px}
+  .metarow{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:8px;margin:2px 0 14px}
 
   .statgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px}
   .stat .k{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;
@@ -376,9 +376,6 @@
   .buystatus{font-size:11px;text-align:center;margin-top:8px;line-height:1.5;min-height:14px}
   .buystatus.ok{color:var(--up)}
   .buystatus.err{color:var(--down)}
-  .fallbacklink{display:block;text-align:center;font-size:10.5px;color:var(--muted);
-    text-decoration:none;margin-top:10px}
-  .fallbacklink:active{opacity:.7}
   .feenote{text-align:center;font-size:9.5px;color:var(--muted);margin-top:8px;line-height:1.5}
 
   footer{color:var(--muted);font-size:10px;text-align:center;padding:20px 24px 30px;
@@ -865,9 +862,9 @@
           <span class="addr addrtext">${esc(truncAddr(coin.tokenAddress))}</span>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>
         </button>
-        <div class="feenote">non-custodial · your wallet signs · 0.3% platform fee<br/>Not financial advice. Memecoins are high risk.</div>
-        <a class="fallbacklink" href="${buyUrl(coin.tokenAddress)}" target="_blank" rel="noopener">Having trouble? Trade $${esc(coin.symbol)} directly on STON.fi →</a>
       </div>
+
+      <div class="feenote">non-custodial · your wallet signs · 0.3% platform fee<br/>Not financial advice. Memecoins are high risk.</div>
     `;
     // Reset to Buy on every fresh coin — otherwise a Sell selection made on
     // the previous coin would silently carry over (tab shows Buy, but the
