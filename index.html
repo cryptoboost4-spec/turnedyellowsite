@@ -6,39 +6,53 @@
 <meta name="theme-color" content="#0E1621" />
 <title>TON Board</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
   :root{
-    /* Telegram-dark navy, not flat black — gives cards room to sit visibly
-       above the background instead of blending into it. */
+    /* Telegram's own dark palette — navy, not flat black — so cards sit
+       visibly above the background instead of blending into it. */
     --bg:#0E1621; --bg-2:#0A0F17;
     --card:#182533; --card-2:#20303F; --card-press:#24384A;
     --line:rgba(0,152,234,.22); --line-soft:rgba(255,255,255,.06);
     --text:#F2F6FC; --muted:#8996A8;
     --ton-a:#0098EA; --ton-b:#00D2FF;
     --up:#3DDC97; --down:#FF5D7A; --warn:#F5B942;
+    --font:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    --font-mono:ui-monospace,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
   }
   *{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
-  html,body{margin:0;background:var(--bg);color:var(--text);
-    font-family:'Space Grotesk',system-ui,sans-serif;-webkit-font-smoothing:antialiased}
-  .mono{font-family:'JetBrains Mono',ui-monospace,monospace}
-  .wrap{max-width:480px;margin:0 auto;min-height:100dvh;position:relative}
+  html,body{margin:0;background:var(--bg);color:var(--text);height:100%;
+    font-family:var(--font);-webkit-font-smoothing:antialiased}
+  body{position:relative;overflow-x:hidden}
+  /* Faint grain for physical texture — the kind of detail templated
+     gradient-blob UIs skip. */
+  body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:50;
+    opacity:.035;mix-blend-mode:overlay;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>")}
+  .tabular{font-variant-numeric:tabular-nums}
+  .addr{font-family:var(--font-mono)}
+  .wrap{max-width:480px;margin:0 auto;height:100dvh;position:relative;overflow:hidden}
   button{font-family:inherit;border:none;background:none;color:inherit;cursor:pointer}
   a{color:inherit}
+
+  /* ---------- Screen stack (Telegram-style push navigation) ---------- */
+  .screen{position:absolute;inset:0;overflow-y:auto;-webkit-overflow-scrolling:touch;
+    background:var(--bg);transition:transform .32s cubic-bezier(.22,.61,.36,1);will-change:transform}
+  #screen-list{transform:translateX(0)}
+  #screen-list.behind{transform:translateX(-22%);pointer-events:none}
+  #screen-detail{transform:translateX(100%)}
+  #screen-detail.active{transform:translateX(0)}
+  @media (prefers-reduced-motion:reduce){.screen{transition:none}}
 
   /* ---------- Top bar ---------- */
   .topbar{position:sticky;top:0;z-index:5;background:rgba(14,22,33,.92);
     backdrop-filter:blur(10px);border-bottom:1px solid var(--line-soft);
     padding:calc(env(safe-area-inset-top) + 10px) 14px 10px}
   .brandrow{display:flex;align-items:center;gap:9px;margin-bottom:10px}
-  .diamond{flex:none;width:24px;height:24px;border-radius:7px;
+  .diamond{flex:none;width:22px;height:22px;border-radius:6px;
     background:linear-gradient(135deg,var(--ton-a),var(--ton-b));
-    transform:rotate(45deg);box-shadow:0 0 14px rgba(0,152,234,.5)}
-  .brandname{font-size:15.5px;font-weight:700;letter-spacing:-.01em}
-  .live{margin-left:auto;display:flex;align-items:center;gap:5px;
-    font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted)}
+    transform:rotate(45deg);box-shadow:0 0 14px rgba(0,152,234,.45)}
+  .brandname{font-size:15px;font-weight:600;letter-spacing:-.005em}
+  .live{margin-left:auto;display:flex;align-items:center;gap:5px;font-size:10.5px;color:var(--muted)}
   .live .dot{width:6px;height:6px;border-radius:50%;background:var(--up);
     box-shadow:0 0 0 0 rgba(61,220,151,.5);animation:pulse 2s infinite}
   .live.err .dot{background:var(--down);animation:none}
@@ -49,54 +63,82 @@
   .searchpill{flex:1;display:flex;align-items:center;gap:8px;
     background:var(--card);border:1px solid var(--line-soft);border-radius:999px;
     padding:10px 14px;min-width:0}
-  .searchpill svg{flex:none;opacity:.55}
+  .searchpill svg{flex:none;opacity:.5}
   .searchpill input{flex:1;min-width:0;background:none;border:none;outline:none;
     color:var(--text);font-family:inherit;font-size:13.5px}
   .searchpill input::placeholder{color:var(--muted)}
   .iconbtn{flex:none;width:38px;height:38px;border-radius:999px;background:var(--card);
-    border:1px solid var(--line-soft);display:flex;align-items:center;justify-content:center}
+    border:1px solid var(--line-soft);display:flex;align-items:center;justify-content:center;
+    transition:transform .12s ease}
+  .iconbtn:active{transform:scale(.92)}
   .iconbtn svg{width:16px;height:16px}
   .iconbtn.spin svg{animation:spin .7s linear infinite}
   @keyframes spin{to{transform:rotate(360deg)}}
 
   main{padding:14px 14px 40px}
 
-  /* ---------- Section glow card ---------- */
-  .section{position:relative;overflow:hidden;border-radius:24px;
-    background:
-      radial-gradient(130% 70% at 18% -10%, rgba(0,152,234,.30), rgba(0,152,234,0) 62%),
-      radial-gradient(90% 60% at 100% 0%, rgba(0,210,255,.14), rgba(0,210,255,0) 55%),
-      var(--bg-2);
-    border:1px solid var(--line-soft);
-    padding:20px 16px 18px}
-  .section-head{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap;margin-bottom:3px}
-  .section-head h2{font-size:22px;font-weight:700;margin:0;letter-spacing:-.01em}
-  .countpill{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;
-    color:var(--ton-b);background:rgba(0,152,234,.15);border:1px solid rgba(0,152,234,.35);
-    border-radius:7px;padding:2px 8px}
-  .section-sub{color:var(--muted);font-size:12px;margin:2px 0 14px}
-
-  .sortrow{display:flex;gap:7px;margin-bottom:14px}
-  .sortpill{font-size:11.5px;font-weight:600;color:var(--muted);background:rgba(255,255,255,.04);
-    border:1px solid var(--line);border-radius:999px;padding:6px 12px}
-  .sortpill.active{color:#03131f;background:linear-gradient(135deg,var(--ton-a),var(--ton-b));
+  /* ---------- Section header (plain — no gradient card, the app's own
+     elevation system does the visual work instead) ---------- */
+  .sectionhead{padding:2px 2px 14px}
+  .sectionhead-row{display:flex;align-items:baseline;gap:9px}
+  .sectionhead h2{font-size:21px;font-weight:700;margin:0;letter-spacing:-.01em}
+  .countpill{font-size:11px;font-weight:600;color:var(--ton-b);background:rgba(0,152,234,.14);
+    border:1px solid rgba(0,152,234,.3);border-radius:7px;padding:2px 7px}
+  .sectionsub{color:var(--muted);font-size:12.5px;margin:4px 0 12px;line-height:1.4}
+  .sortrow{display:flex;gap:7px}
+  .sortpill,.rangepill{font-size:11.5px;font-weight:600;color:var(--muted);background:var(--card-2);
+    border:1px solid var(--line-soft);border-radius:999px;padding:6px 12px;transition:transform .12s ease}
+  .sortpill:active,.rangepill:active{transform:scale(.95)}
+  .sortpill.active,.rangepill.active{color:#03131f;background:linear-gradient(135deg,var(--ton-a),var(--ton-b));
     border-color:transparent}
+
+  .spot-eyebrow{font-size:10.5px;font-weight:700;color:var(--muted);text-transform:uppercase;
+    letter-spacing:.07em;margin:0 2px 8px}
+
+  @keyframes cardIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+  @media (prefers-reduced-motion:reduce){.tcard,.spotlight{animation:none !important}}
+
+  /* ---------- Spotlight (top pick — breaks the grid's uniformity) ---------- */
+  .spotlight{display:flex;align-items:center;gap:12px;width:100%;text-align:left;
+    background:var(--card);border:1px solid var(--line);border-radius:16px;padding:11px;
+    margin-bottom:12px;box-shadow:0 8px 22px -10px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.03);
+    transition:transform .12s ease,background .12s ease;animation:cardIn .3s ease both}
+  .spotlight:active{transform:scale(.98);background:var(--card-press)}
+  .spot-media{flex:none;width:52px;height:52px;border-radius:13px;overflow:hidden;position:relative;
+    background:var(--card-2)}
+  .spot-media img{width:100%;height:100%;object-fit:cover;display:block}
+  .spot-media .fallback{width:100%;height:100%;display:flex;align-items:center;justify-content:center;
+    background:linear-gradient(135deg, rgba(0,152,234,.35), rgba(0,210,255,.12));
+    font-size:20px;font-weight:700;color:rgba(242,246,252,.85)}
+  .spot-body{flex:1;min-width:0}
+  .spot-top{display:flex;align-items:center;gap:6px;min-width:0}
+  .spot-name{font-size:14.5px;font-weight:700;letter-spacing:-.005em;min-width:0;flex:0 1 auto;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .spot-badge{flex:none;font-size:8.5px;font-weight:600;color:var(--ton-b);background:rgba(0,152,234,.14);
+    border:1px solid rgba(0,152,234,.3);border-radius:5px;padding:2px 5px;text-transform:uppercase}
+  .spot-badge.warn{color:var(--warn);background:rgba(245,185,66,.12);border-color:rgba(245,185,66,.35)}
+  .spot-ticker{color:var(--muted);font-size:11.5px;margin-top:1px}
+  .spot-stats{flex:none;text-align:right;max-width:38%}
+  .spot-price{font-size:13px;font-weight:600;white-space:nowrap}
+  .spot-price .muted{color:var(--muted);font-weight:500}
+  .spot-chg{font-size:11.5px;margin-top:2px;font-weight:600}
 
   /* ---------- Token grid ---------- */
   .tgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
   .tcard{background:var(--card);border:1px solid var(--line);border-radius:18px;
-    overflow:hidden;text-align:left;
-    box-shadow:0 6px 18px -8px rgba(0,0,0,.6), 0 0 0 1px rgba(0,0,0,.15)}
-  .tcard:active{background:var(--card-press)}
+    overflow:hidden;text-align:left;transition:transform .12s ease,background .12s ease;
+    box-shadow:0 8px 22px -10px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.03);
+    animation:cardIn .3s ease both}
+  .tcard:active{transform:scale(.97);background:var(--card-press)}
   .tmedia{position:relative;width:100%;aspect-ratio:1/1;background:var(--card-2);
     display:flex;align-items:center;justify-content:center}
   .tmedia img{width:100%;height:100%;object-fit:cover;display:block}
   .tmedia .fallback{width:100%;height:100%;
     background:linear-gradient(135deg, rgba(0,152,234,.35), rgba(0,210,255,.12));
     display:flex;align-items:center;justify-content:center;
-    font-size:30px;font-weight:700;color:rgba(234,240,251,.85)}
+    font-size:30px;font-weight:700;color:rgba(242,246,252,.85)}
   .tbadge{position:absolute;top:8px;left:8px;font-size:9px;font-weight:600;color:var(--text);
-    background:rgba(0,0,0,.6);backdrop-filter:blur(4px);border:1px solid rgba(255,255,255,.12);
+    background:rgba(10,15,23,.7);backdrop-filter:blur(4px);border:1px solid rgba(255,255,255,.12);
     border-radius:6px;padding:3px 7px;text-transform:uppercase;letter-spacing:.03em;
     max-width:calc(100% - 16px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .tbadge.warn{color:var(--warn);border-color:rgba(245,185,66,.4)}
@@ -104,33 +146,45 @@
   .tname{font-size:13.5px;font-weight:700;letter-spacing:-.01em;
     overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .tticker{color:var(--muted);font-size:11px;margin-top:1px}
-  .tprice{font-family:'JetBrains Mono',monospace;font-size:12px;margin-top:7px}
+  .tprice{font-size:12px;margin-top:7px}
   .tprice b{font-weight:600}
   .tprice .muted{color:var(--muted);font-weight:500}
-  .tchg{font-family:'JetBrains Mono',monospace;font-size:11px;margin-top:3px}
+  .tchg{font-size:11px;margin-top:3px;font-weight:600}
   .up{color:var(--up)} .down{color:var(--down)}
-  .tfoot{display:flex;justify-content:space-between;color:var(--muted);
-    font-family:'JetBrains Mono',monospace;font-size:9.5px;margin-top:7px}
+  .tfoot{display:flex;justify-content:space-between;color:var(--muted);font-size:9.5px;margin-top:7px}
+
+  /* ---------- Loading skeletons ---------- */
+  @keyframes shimmer{0%{background-position:100% 0}100%{background-position:0 0}}
+  .skel{background:linear-gradient(90deg, var(--card-2) 25%, var(--card-press) 37%, var(--card-2) 63%);
+    background-size:400% 100%;animation:shimmer 1.4s ease infinite}
+  .skel-line{height:9px;border-radius:5px}
+  .spot-skel{height:74px;border-radius:16px;margin-bottom:12px}
+  .tcard-skel .tmedia{aspect-ratio:1/1}
+
+  /* ---------- Empty / error states ---------- */
+  .state{grid-column:1/-1;color:var(--muted);text-align:center;padding:50px 20px;font-size:12.5px;
+    line-height:1.6}
+  .state svg{opacity:.45}
+  .state b{color:var(--text)}
 
   /* ---------- Detail screen ---------- */
-  .screen{display:none}
-  .screen.active{display:block}
   .detail-topbar{position:sticky;top:0;z-index:5;background:rgba(14,22,33,.92);
     backdrop-filter:blur(10px);border-bottom:1px solid var(--line-soft);
     padding:calc(env(safe-area-inset-top) + 10px) 14px 10px}
   .backpill{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;
-    color:var(--text);background:var(--card);border:1px solid var(--line);
-    border-radius:999px;padding:8px 14px}
+    color:var(--text);background:var(--card);border:1px solid var(--line-soft);
+    border-radius:999px;padding:8px 14px;transition:transform .12s ease}
+  .backpill:active{transform:scale(.95)}
   .detail-content{padding:14px 14px 40px}
 
   .dcard{background:var(--card);border:1px solid var(--line);border-radius:16px;
-    padding:14px;margin-bottom:12px}
+    padding:14px;margin-bottom:12px;box-shadow:0 8px 22px -10px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.03)}
   .dcard h3{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);
     margin:0 0 10px;font-weight:600}
   .desc{font-size:12.5px;line-height:1.55;color:#C7CEDB;margin:0 0 12px}
   .links{display:flex;gap:8px;flex-wrap:wrap}
   .links a{font-size:11px;font-weight:600;color:var(--ton-b);text-decoration:none;
-    border:1px solid rgba(0,152,234,.3);background:rgba(0,152,234,.08);
+    border:1px solid var(--line-soft);background:var(--card-2);
     border-radius:999px;padding:6px 12px}
 
   .tokhead{display:flex;align-items:center;gap:10px;margin-bottom:14px}
@@ -143,21 +197,26 @@
   .tokhead .nm{font-size:17px;font-weight:700;letter-spacing:-.01em}
   .tokhead .tk{color:var(--muted);font-size:12px;margin-top:1px}
 
-  .statgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .statgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px}
   .stat .k{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;
     margin-bottom:4px}
-  .stat .v{font-family:'JetBrains Mono',monospace;font-size:14.5px;font-weight:600}
+  .stat .v{font-size:14.5px;font-weight:600}
 
-  .pricehead{display:flex;align-items:baseline;gap:10px;margin-bottom:2px}
-  .pricehead .big{font-family:'JetBrains Mono',monospace;font-size:26px;font-weight:600}
-  .pricehead .chg{font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:600}
+  .pricehead{display:flex;align-items:baseline;gap:10px;margin-bottom:10px}
+  .pricehead .big{font-size:25px;font-weight:700;letter-spacing:-.01em}
+  .pricehead .chg{font-size:13px;font-weight:600}
+
+  .rangerow{display:flex;gap:6px;margin-bottom:10px}
+  .chartbox{height:90px}
+  .chart-svg{width:100%;height:90px;display:block}
+  .chart-empty{font-size:11px;color:var(--muted);text-align:center;padding:32px 8px;line-height:1.5}
 
   .trust{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
-  .trust-item{background:var(--card-2);border:1px solid var(--line);border-radius:9px;
+  .trust-item{background:var(--card-2);border:1px solid var(--line-soft);border-radius:9px;
     padding:8px 10px}
   .trust-item .k{font-size:9.5px;color:var(--muted);text-transform:uppercase;
     letter-spacing:.04em;margin-bottom:3px}
-  .trust-item .v{font-family:'JetBrains Mono',monospace;font-size:12.5px;font-weight:500}
+  .trust-item .v{font-size:12.5px;font-weight:500}
   .v.ok{color:var(--up)} .v.bad{color:var(--down)} .v.unk{color:var(--warn)}
 
   .holderbar{height:7px;border-radius:4px;overflow:hidden;display:flex;
@@ -165,25 +224,23 @@
   .holderbar span{height:100%}
   .holdercap{display:flex;justify-content:space-between;font-size:10px;color:var(--muted);
     margin-top:8px}
+  .trustnote{font-size:9.5px;color:var(--muted);margin-top:10px;line-height:1.5}
 
   .buy{display:block;text-align:center;text-decoration:none;font-weight:700;font-size:14px;
     color:#03131f;background:linear-gradient(135deg,var(--ton-a),var(--ton-b));
-    border-radius:12px;padding:14px;letter-spacing:.01em;margin-top:4px}
-  .buy:active{transform:translateY(1px)}
+    border-radius:12px;padding:14px;letter-spacing:.01em;margin-top:4px;transition:transform .12s ease}
+  .buy:active{transform:scale(.98)}
   .feenote{text-align:center;font-size:9.5px;color:var(--muted);margin-top:8px;line-height:1.5}
 
-  .state{color:var(--muted);text-align:center;padding:60px 24px;font-size:13px;line-height:1.6}
-  .state b{color:var(--text)}
-
   footer{color:var(--muted);font-size:10px;text-align:center;padding:20px 24px 30px;
-    line-height:1.6;border-top:1px solid var(--line);margin-top:6px}
+    line-height:1.6;border-top:1px solid var(--line-soft);margin-top:6px}
 </style>
 </head>
 <body>
 <div class="wrap">
 
   <!-- ===================== LIST SCREEN ===================== -->
-  <div class="screen active" id="screen-list">
+  <div class="screen" id="screen-list">
     <div class="topbar">
       <div class="brandrow">
         <div class="diamond"></div>
@@ -202,20 +259,18 @@
     </div>
 
     <main>
-      <div class="section">
-        <div class="section-head">
-          <h2>Trending</h2>
-          <span class="countpill mono" id="countpill">0</span>
-        </div>
-        <div class="section-sub">Top TON tokens by 24h volume — screened for basic risk signals.</div>
-
+      <div class="sectionhead">
+        <div class="sectionhead-row"><h2>Trending</h2><span class="countpill tabular" id="countpill">0</span></div>
+        <p class="sectionsub">Top TON tokens by 24h volume — screened for basic risk signals.</p>
         <div class="sortrow">
           <button class="sortpill active" id="sortVolume" onclick="setSort('volume')">Volume</button>
           <button class="sortpill" id="sortGainers" onclick="setSort('gainers')">Gainers</button>
         </div>
-
-        <div class="tgrid" id="grid"></div>
       </div>
+
+      <div class="spot-eyebrow" id="spotEyebrow">Top by volume</div>
+      <div id="spotlight"></div>
+      <div class="tgrid" id="grid"></div>
     </main>
 
     <footer>
@@ -239,7 +294,7 @@
   const tg = window.Telegram?.WebApp;
   if (tg){
     tg.ready(); tg.expand();
-    try { tg.setBackgroundColor?.('#0a0a0a'); tg.setHeaderColor?.('#0a0a0a'); } catch(e){}
+    try { tg.setBackgroundColor?.('#0E1621'); tg.setHeaderColor?.('#0E1621'); } catch(e){}
     tg.BackButton?.onClick(() => showList());
   }
 
@@ -253,6 +308,9 @@
   let allCoins = [];
   let sortMode = 'volume';
   let searchTerm = '';
+  let currentDetailCoin = null;
+  let currentChartRange = '24h';
+  const chartCache = {};
 
   function esc(s){return String(s??"").replace(/[&<>"]/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[m]));}
   const fmtPrice = (p) => {
@@ -325,29 +383,55 @@
       "&referral_value=" + REFERRAL_VALUE;
   }
 
-  function tokenIconHtml(coin, size){
+  function tokenIconHtml(coin){
     if (coin.imageUrl) return `<img src="${esc(coin.imageUrl)}" loading="lazy" alt="" onerror="this.parentElement.innerHTML='<div class=fallback>${esc((coin.symbol||'?')[0])}</div>'"/>`;
     return `<div class="fallback">${esc((coin.symbol||'?')[0])}</div>`;
   }
 
-  function renderCard(coin, idx){
+  function priceRowHtml(coin){
+    if (coin.marketCapUsd != null) {
+      return `<b>${fmtUsd(coin.marketCapUsd)}</b> <span class="muted">MC</span>` +
+        (coin.fdvUsd != null && coin.fdvUsd !== coin.marketCapUsd ? ` / ${fmtUsd(coin.fdvUsd)} FDV` : "");
+    }
+    if (coin.fdvUsd != null) return `<b>${fmtUsd(coin.fdvUsd)}</b> <span class="muted">FDV</span>`;
+    return `<span class="muted">MC —</span>`;
+  }
+
+  function compactPriceHtml(coin){
+    if (coin.marketCapUsd != null) return `<b>${fmtUsd(coin.marketCapUsd)}</b> <span class="muted">MC</span>`;
+    if (coin.fdvUsd != null) return `<b>${fmtUsd(coin.fdvUsd)}</b> <span class="muted">FDV</span>`;
+    return `<span class="muted">—</span>`;
+  }
+
+  function renderSpotlight(coin, idx){
+    const dir = coin.change24h >= 0 ? "up" : "down";
+    const hp = coin.is_honeypot;
+    const badgeText = hp === true ? "Honeypot?" : coin.launchpad;
+    return `
+    <button class="spotlight" onclick="showDetail(${idx})" style="animation-delay:0ms">
+      <div class="spot-media">${tokenIconHtml(coin)}</div>
+      <div class="spot-body">
+        <div class="spot-top">
+          <span class="spot-name">${esc(coin.name)}</span>
+          ${badgeText ? `<span class="spot-badge${hp===true?' warn':''}">${esc(badgeText)}</span>` : ""}
+        </div>
+        <div class="spot-ticker">$${esc(coin.symbol)}</div>
+      </div>
+      <div class="spot-stats">
+        <div class="spot-price tabular">${compactPriceHtml(coin)}</div>
+        <div class="spot-chg tabular ${dir}">${fmtChg(coin.change24h)}</div>
+      </div>
+    </button>`;
+  }
+
+  function renderCard(coin, idx, delayMs){
     const dir = coin.change24h >= 0 ? "up" : "down";
     const hp = coin.is_honeypot;
     const badgeText = hp === true ? "Honeypot?" : (coin.launchpad || "New");
     const badgeWarn = hp === true;
 
-    let priceRow;
-    if (coin.marketCapUsd != null) {
-      priceRow = `<b>${fmtUsd(coin.marketCapUsd)}</b> <span class="muted">MC</span>` +
-        (coin.fdvUsd != null && coin.fdvUsd !== coin.marketCapUsd ? ` / ${fmtUsd(coin.fdvUsd)} FDV` : "");
-    } else if (coin.fdvUsd != null) {
-      priceRow = `<b>${fmtUsd(coin.fdvUsd)}</b> <span class="muted">FDV</span>`;
-    } else {
-      priceRow = `<span class="muted">MC —</span>`;
-    }
-
     return `
-    <button class="tcard" onclick="showDetail(${idx})">
+    <button class="tcard" onclick="showDetail(${idx})" style="animation-delay:${delayMs}ms">
       <div class="tmedia">
         <span class="tbadge${badgeWarn?' warn':''}">${esc(badgeText)}</span>
         ${tokenIconHtml(coin)}
@@ -355,14 +439,32 @@
       <div class="tbody">
         <div class="tname">${esc(coin.name)}</div>
         <div class="tticker">$${esc(coin.symbol)}</div>
-        <div class="tprice mono">${priceRow}</div>
-        <div class="tchg mono ${dir}">${fmtChg(coin.change24h)}</div>
+        <div class="tprice tabular">${priceRowHtml(coin)}</div>
+        <div class="tchg tabular ${dir}">${fmtChg(coin.change24h)}</div>
         <div class="tfoot">
-          <span>${esc(truncAddr(coin.tokenAddress))}</span>
-          <span>${esc(fmtAge(coin.poolCreatedAt))}</span>
+          <span class="addr">${esc(truncAddr(coin.tokenAddress))}</span>
+          <span class="tabular">${esc(fmtAge(coin.poolCreatedAt))}</span>
         </div>
       </div>
     </button>`;
+  }
+
+  function skeletonCard(){
+    return `<div class="tcard tcard-skel">
+      <div class="tmedia skel"></div>
+      <div class="tbody">
+        <div class="skel skel-line" style="width:70%"></div>
+        <div class="skel skel-line" style="width:40%;margin-top:6px"></div>
+        <div class="skel skel-line" style="width:55%;margin-top:10px"></div>
+      </div>
+    </div>`;
+  }
+
+  function emptyIcon(){
+    return `<svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>`;
+  }
+  function errorIcon(){
+    return `<svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>`;
   }
 
   function trustChip(label, value, kind){
@@ -399,7 +501,7 @@
         <div class="icon">${tokenIconHtml(coin)}</div>
         <div>
           <div class="nm">${esc(coin.name)}</div>
-          <div class="tk mono">$${esc(coin.symbol)}</div>
+          <div class="tk addr">$${esc(coin.symbol)}</div>
         </div>
       </div>
 
@@ -412,15 +514,19 @@
 
       <div class="dcard">
         <div class="pricehead">
-          <span class="big">${fmtPrice(coin.priceUsd)}</span>
-          <span class="chg ${dir}">${fmtChg(coin.change24h)}</span>
+          <span class="big tabular">${fmtPrice(coin.priceUsd)}</span>
+          <span class="chg tabular ${dir}">${fmtChg(coin.change24h)}</span>
         </div>
-        <div style="color:var(--muted);font-size:11px;margin-bottom:14px">24h change · live chart coming soon</div>
+        <div class="rangerow">
+          <button class="rangepill active" data-range="24h" onclick="setChartRange('24h')">24H</button>
+          <button class="rangepill" data-range="7d" onclick="setChartRange('7d')">7D</button>
+        </div>
+        <div class="chartbox" id="chartBox"><div class="skel" style="width:100%;height:100%;border-radius:8px"></div></div>
         <div class="statgrid">
-          <div class="stat"><div class="k">Market cap</div><div class="v">${fmtUsd(coin.marketCapUsd)}</div></div>
-          <div class="stat"><div class="k">Liquidity</div><div class="v">${fmtUsd(coin.liquidityUsd)}</div></div>
-          <div class="stat"><div class="k">24h volume</div><div class="v">${fmtUsd(coin.volume24h)}</div></div>
-          <div class="stat"><div class="k">ATH</div><div class="v" style="color:var(--muted)">—</div></div>
+          <div class="stat"><div class="k">Market cap</div><div class="v tabular">${fmtUsd(coin.marketCapUsd)}</div></div>
+          <div class="stat"><div class="k">Liquidity</div><div class="v tabular">${fmtUsd(coin.liquidityUsd)}</div></div>
+          <div class="stat"><div class="k">24h volume</div><div class="v tabular">${fmtUsd(coin.volume24h)}</div></div>
+          <div class="stat"><div class="k">ATH</div><div class="v tabular" style="color:var(--muted)">—</div></div>
         </div>
       </div>
 
@@ -440,6 +546,7 @@
           <span style="width:${top10}%;background:var(--warn)"></span>
           <span style="width:${rest}%;background:var(--ton-a)"></span>
         </div>` : ""}
+        <div class="trustnote">Via GeckoTerminal — displayed as-is, not independently verified by us.</div>
       </div>
 
       <a class="buy" href="${buyUrl(coin.tokenAddress)}" target="_blank" rel="noopener">Buy $${esc(coin.symbol)} on STON.fi</a>
@@ -447,18 +554,77 @@
     `;
   }
 
+  function buildChartSvg(list){
+    const closes = list.map(c => c[4]);
+    const min = Math.min(...closes), max = Math.max(...closes);
+    const span = (max - min) || 1;
+    const w = 300, h = 90, pad = 4;
+    const pts = closes.map((c, i) => {
+      const x = pad + (i / (closes.length - 1)) * (w - pad * 2);
+      const y = pad + (1 - (c - min) / span) * (h - pad * 2);
+      return [x, y];
+    });
+    const up = closes[closes.length - 1] >= closes[0];
+    const color = up ? "#3DDC97" : "#FF5D7A";
+    const line = pts.map((p, i) => (i === 0 ? "M" : "L") + p[0].toFixed(2) + "," + p[1].toFixed(2)).join(" ");
+    const area = line + ` L${pts[pts.length-1][0].toFixed(2)},${h-pad} L${pts[0][0].toFixed(2)},${h-pad} Z`;
+    const gid = "cg" + Math.random().toString(36).slice(2, 8);
+    return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" class="chart-svg">
+      <defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="${color}" stop-opacity=".28"/>
+        <stop offset="100%" stop-color="${color}" stop-opacity="0"/>
+      </linearGradient></defs>
+      <path d="${area}" fill="url(#${gid})" stroke="none"/>
+      <path d="${line}" fill="none" stroke="${color}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>`;
+  }
+
+  window.setChartRange = function(range){ loadChart(range); };
+
+  async function loadChart(range){
+    currentChartRange = range;
+    document.querySelectorAll(".rangepill").forEach(b => b.classList.toggle("active", b.dataset.range === range));
+    const box = document.getElementById("chartBox");
+    const coin = currentDetailCoin;
+    if (!box || !coin) return;
+    if (!coin.poolAddress) {
+      box.innerHTML = `<div class="chart-empty">Chart unavailable — no pool address for this token.</div>`;
+      return;
+    }
+    const key = coin.poolAddress + "_" + range;
+    if (chartCache[key]) { box.innerHTML = chartCache[key]; return; }
+    box.innerHTML = `<div class="skel" style="width:100%;height:100%;border-radius:8px"></div>`;
+    try {
+      const cfg = range === "7d" ? { timeframe: "hour", aggregate: 4, limit: 42 } : { timeframe: "hour", aggregate: 1, limit: 24 };
+      const res = await fetchJson(`${GT_BASE}/networks/${NETWORK}/pools/${coin.poolAddress}/ohlcv/${cfg.timeframe}?aggregate=${cfg.aggregate}&limit=${cfg.limit}&currency=usd`);
+      const list = (res?.data?.attributes?.ohlcv_list || []).slice().sort((a, b) => a[0] - b[0]);
+      if (list.length < 2) throw new Error("not enough candles yet for this pool");
+      const svg = buildChartSvg(list);
+      if (currentDetailCoin === coin && currentChartRange === range) {
+        chartCache[key] = svg;
+        box.innerHTML = svg;
+      }
+    } catch (e) {
+      if (currentDetailCoin === coin && currentChartRange === range) {
+        box.innerHTML = `<div class="chart-empty">Couldn't load chart.<br/>${esc(e.message || e)}</div>`;
+      }
+    }
+  }
+
   window.showDetail = function(idx){
     const coin = allCoins[idx];
     if (!coin) return;
+    currentDetailCoin = coin;
     renderDetail(coin);
-    document.getElementById("screen-list").classList.remove("active");
     document.getElementById("screen-detail").classList.add("active");
-    window.scrollTo(0,0);
+    document.getElementById("screen-list").classList.add("behind");
+    document.getElementById("screen-detail").scrollTop = 0;
     tg?.BackButton?.show();
+    loadChart("24h");
   };
   window.showList = function(){
     document.getElementById("screen-detail").classList.remove("active");
-    document.getElementById("screen-list").classList.add("active");
+    document.getElementById("screen-list").classList.remove("behind");
     tg?.BackButton?.hide();
   };
 
@@ -486,9 +652,20 @@
       : b.volume24h - a.volume24h);
 
     document.getElementById("countpill").textContent = list.length;
-    document.getElementById("grid").innerHTML = list.length
-      ? list.map(c => renderCard(c, c._idx)).join("")
-      : `<div class="state" style="grid-column:1/-1">No matches.</div>`;
+    document.getElementById("spotEyebrow").textContent = "Top by " + (sortMode === "gainers" ? "gainers" : "volume");
+
+    const spotEl = document.getElementById("spotlight");
+    const gridEl = document.getElementById("grid");
+
+    if (!list.length) {
+      spotEl.innerHTML = "";
+      gridEl.innerHTML = `<div class="state">${emptyIcon()}<div style="margin-top:10px">No matches for "<b>${esc(searchTerm)}</b>"</div></div>`;
+      return;
+    }
+
+    const [top, ...rest] = list;
+    spotEl.innerHTML = renderSpotlight(top, top._idx);
+    gridEl.innerHTML = rest.map((c, i) => renderCard(c, c._idx, i * 30)).join("");
   }
 
   function setLive(state){
@@ -502,7 +679,8 @@
     const btn = document.getElementById("refreshBtn");
     btn.classList.add("spin");
     setLive("loading");
-    document.getElementById("grid").innerHTML = `<div class="state" style="grid-column:1/-1">Loading live data…</div>`;
+    document.getElementById("spotlight").innerHTML = `<div class="skel spot-skel"></div>`;
+    document.getElementById("grid").innerHTML = Array(9).fill(0).map(skeletonCard).join("");
     try {
       // Step 1: top pools by 24h volume
       const poolsRes = await fetchJson(`${GT_BASE}/networks/${NETWORK}/pools?sort=h24_volume_usd_desc&page=1`);
@@ -568,9 +746,10 @@
     } catch (e) {
       setLive("error");
       document.getElementById("countpill").textContent = "0";
+      document.getElementById("spotlight").innerHTML = "";
       document.getElementById("grid").innerHTML =
-        `<div class="state" style="grid-column:1/-1"><b>Couldn't load live data.</b><br/>${esc(e.message || e)}<br/><br/>
-         This is an honest error, not a fallback — worth knowing before we deploy for real.</div>`;
+        `<div class="state">${errorIcon()}<div style="margin-top:10px"><b>Couldn't load live data.</b><br/>${esc(e.message || e)}</div>
+         <div style="margin-top:10px;font-size:11px;opacity:.7">Honest error, not a fallback — worth knowing before we deploy for real.</div></div>`;
     } finally {
       btn.classList.remove("spin");
     }
