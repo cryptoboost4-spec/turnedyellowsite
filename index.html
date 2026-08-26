@@ -344,11 +344,12 @@
   .swappreview-row .v.bad{color:var(--down)}
   .swappreview-loading,.swappreview-err{font-size:11px;color:var(--muted);text-align:center;padding:2px 0}
   .swappreview-err{color:var(--down)}
-  .swapdebug-toggle{display:block;width:100%;text-align:center;font-size:10.5px;color:var(--muted);
-    background:none;border:none;padding:8px 0 2px;text-decoration:underline;text-underline-offset:2px}
-  .swapdebug-body{margin-top:6px;padding:9px 10px;background:var(--card-2);border:1px solid var(--line-soft);
-    border-radius:8px;font-family:var(--font-mono);font-size:9.5px;line-height:1.5;white-space:pre-wrap;
-    word-break:break-all;color:var(--muted);max-height:240px;overflow-y:auto}
+  .ca-row{display:flex;align-items:center;justify-content:center;gap:6px;width:100%;
+    margin-top:12px;padding:8px 0 2px;background:none;border:none;font-size:11px;color:var(--muted)}
+  .ca-row .k{text-transform:uppercase;letter-spacing:.05em;font-size:9.5px}
+  .ca-row svg{width:12px;height:12px;opacity:.6;flex:none}
+  .ca-row.copied{color:var(--up)}
+  .ca-row.copied svg{opacity:1}
 
   .buy{display:block;width:100%;text-align:center;text-decoration:none;font-weight:700;font-size:14px;
     color:#03131f;background:linear-gradient(135deg,var(--ton-a),var(--ton-b));
@@ -827,9 +828,12 @@
         </div>
         <div class="swappreview" id="swapPreview"></div>
         <button class="buy" id="buyBtn" onclick="window.handleTrade?.()">Connect wallet to buy</button>
-        <button type="button" class="swapdebug-toggle" id="swapDebugToggle" onclick="window.toggleSwapDebug?.()">▸ Debug: request &amp; response</button>
-        <pre class="swapdebug-body" id="swapDebugBody" hidden>(nothing sent yet — enter an amount)</pre>
         <div class="buystatus" id="buyStatus"></div>
+        <button type="button" class="ca-row" onclick="window.copyAddr?.('${esc(coin.tokenAddress)}', this)">
+          <span class="k">Contract</span>
+          <span class="addr addrtext">${esc(truncAddr(coin.tokenAddress))}</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>
+        </button>
         <div class="feenote">non-custodial · your wallet signs · 0.3% platform fee<br/>Not financial advice. Memecoins are high risk.</div>
         <a class="fallbacklink" href="${buyUrl(coin.tokenAddress)}" target="_blank" rel="noopener">Having trouble? Trade $${esc(coin.symbol)} directly on STON.fi →</a>
       </div>
@@ -1290,6 +1294,6 @@
      Still not live-tested end-to-end with a real wallet approving a real
      transaction — the "Having trouble?" link on the Buy button is a
      working fallback to STON.fi's own swap page if anything here breaks. -->
-<script src="wallet-bundle.js?v=10"></script>
+<script src="wallet-bundle.js?v=11"></script>
 </body>
 </html>

@@ -142,42 +142,6 @@ function sideLabel(asset) {
   return asset.symbol === "TON" ? "TON" : "$" + asset.symbol;
 }
 
-// ---- Debug panel: shows the actual request sent and response received
-// for the last swap attempt, so a failure can be diagnosed from what's
-// really on the wire instead of guessing from an error message alone. ----
-let debugLog = [];
-function resetDebugLog() {
-  debugLog = [];
-  renderDebugLog();
-}
-function logDebug(label, value) {
-  debugLog.push([label, value]);
-  renderDebugLog();
-}
-function renderDebugLog() {
-  const el = document.getElementById("swapDebugBody");
-  if (!el) return;
-  el.textContent = debugLog
-    .map(([label, value]) => {
-      let str;
-      try {
-        str = typeof value === "string" ? value : JSON.stringify(value, null, 2);
-      } catch {
-        str = String(value);
-      }
-      return `── ${label} ──\n${str}`;
-    })
-    .join("\n\n") || "(nothing sent yet — enter an amount)";
-}
-window.toggleSwapDebug = function () {
-  const body = document.getElementById("swapDebugBody");
-  const btn = document.getElementById("swapDebugToggle");
-  if (!body || !btn) return;
-  const open = body.hidden;
-  body.hidden = !open;
-  btn.textContent = (open ? "▾" : "▸") + " Debug: request & response";
-};
-
 // STON.fi's own per-asset risk data (honeypot/suspicious/fake/blacklisted/
 // deprecated flags, liquidity tier) — exposed for index.html's Trust
 // signals card, which has no other way to reach the STON.fi SDK/apiClient
@@ -192,34 +156,19 @@ window.loadAssetTrust = async function (address) {
   }
 };
 
-function buildSimulateUrl(offerAddress, askAddress, units) {
-  const p = new URLSearchParams({
-    offer_address: offerAddress,
-    ask_address: askAddress,
-    slippage_tolerance: "0.01",
-    units,
-  });
-  return "https://api.ston.fi/v1/swap/simulate?" + p.toString();
-}
-
 // Shared by the live preview and the real trade flow — both hit the exact
 // same STON.fi endpoint, so there's one place building the request and
 // logging it to the debug panel instead of copies that could drift.
 async function runSimulate(offerAddress, askAddress, nano) {
-  const url = buildSimulateUrl(offerAddress, askAddress, nano);
   try {
-    const sim = await apiClient.simulateSwap({
+    return await apiClient.simulateSwap({
       offerAddress,
       askAddress,
       offerUnits: nano,
       slippageTolerance: "0.01",
     });
-    logDebug("Request", "POST " + url);
-    logDebug("Response 200", sim);
-    return sim;
   } catch (e) {
-    logDebug("Request", "POST " + url);
-    logDebug(`Response ${e?.status ?? "?"}`, e?.data ?? e?.message ?? String(e));
+    console.error("Simulate failed:", e, "response body:", e?.data);
     throw e;
   }
 }
@@ -345,7 +294,6 @@ window.setTradeMode = function (mode) {
   const statusEl = document.getElementById("buyStatus");
   if (statusEl) { statusEl.textContent = ""; statusEl.className = "buystatus"; }
 
-  resetDebugLog();
   updateBalanceHint();
   loadBalance();
   window.refreshBuyUi?.();
@@ -427,7 +375,6 @@ window.previewSwap = function () {
 
   setTimeout(async () => {
     if (myToken !== previewToken) return; // a newer keystroke superseded this one
-    resetDebugLog();
     try {
       const sim = await runSimulate(offer.address, ask.address, nano);
       if (myToken !== previewToken) return;
@@ -560,7 +507,6 @@ window.handleTrade = async function () {
   statusEl.textContent = "";
   statusEl.className = "buystatus";
 
-  resetDebugLog();
   try {
     const simulationResult = await runSimulate(offer.address, ask.address, nano);
 
@@ -599,14 +545,12 @@ window.handleTrade = async function () {
       amount: txParams.value.toString(),
       payload: txParams.body.toBoc().toString("base64"),
     };
-    logDebug("Built transaction (for wallet)", message);
 
     setBuyButtonsText("Confirm in your wallet…", { disabled: true, progress: true });
-    const sendResult = await tonConnectUI.sendTransaction({
+    await tonConnectUI.sendTransaction({
       validUntil: Math.floor(Date.now() / 1000) + 300,
       messages: [message],
     });
-    logDebug("Wallet response", sendResult);
 
     statusEl.textContent = "Sent — check your wallet for confirmation.";
     statusEl.className = "buystatus ok";
@@ -615,7 +559,6 @@ window.handleTrade = async function () {
     walletAssetsCache = null; // balance just changed on-chain
     loadBalance();
   } catch (e) {
-    logDebug("Error", describeError(e));
     console.error("Swap failed:", e, "response body:", e?.data);
     statusEl.textContent = describeError(e) + " — try the direct STON.fi link below.";
     statusEl.className = "buystatus err";
