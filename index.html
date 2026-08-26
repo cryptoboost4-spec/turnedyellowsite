@@ -208,8 +208,8 @@
   .desc{font-size:12.5px;line-height:1.55;color:#C7CEDB;margin:0 0 12px}
   /* Sized to match the reference app's pills 1:1 (measured off a real
      screenshot: ~14px badge in a ~30px-tall capsule, 12px label) — small,
-     content-hugging chips that wrap, not stretched grid cells. */
-  .ilinks{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:14px}
+     content-hugging chips that wrap, not stretched grid cells. Sits
+     inline with the contract-address chip in .metarow below. */
   .ilink{display:inline-flex;align-items:center;gap:7px;border-radius:999px;text-decoration:none;
     border:1px solid var(--line-soft);background:var(--card-2);padding:7px 11px 7px 10px;
     transition:transform .12s ease,background .12s ease;overflow:hidden}
@@ -233,8 +233,8 @@
     font-weight:700;font-size:16px}
   .tokhead .nm{font-size:17px;font-weight:700;letter-spacing:-.01em}
   .tokhead .tk{color:var(--muted);font-size:12px;margin-top:1px}
-  .addrrow{display:flex;align-items:center;gap:5px;color:var(--muted);font-size:11px;
-    margin:2px 0 14px 2px}
+  .metarow{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:2px 0 14px}
+  .addrrow{display:flex;align-items:center;gap:5px;color:var(--muted);font-size:11px}
   .addrrow svg{width:12px;height:12px;opacity:.6;flex:none}
   .addrrow.copied{color:var(--up)}
   .addrrow.copied svg{opacity:1}
@@ -638,11 +638,13 @@
           <div class="tk addr">$${esc(coin.symbol)}</div>
         </div>
       </div>
-      <div class="addrrow" onclick="window.copyAddr?.('${esc(coin.tokenAddress)}', this)">
-        <span class="addr addrtext">${esc(truncAddr(coin.tokenAddress))}</span>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>
+      <div class="metarow">
+        <div class="addrrow" onclick="window.copyAddr?.('${esc(coin.tokenAddress)}', this)">
+          <span class="addr addrtext">${esc(truncAddr(coin.tokenAddress))}</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>
+        </div>
+        ${iconLinks.join("")}
       </div>
-      ${iconLinks.length ? `<div class="ilinks">${iconLinks.join("")}</div>` : ""}
 
       <div class="dcard">
         <h3>About</h3>
