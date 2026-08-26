@@ -205,16 +205,31 @@
   .portfolio-head{text-align:center;padding:22px 14px}
   .portfolio-head .k{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
   .portfolio-total{font-size:32px;font-weight:700;letter-spacing:-.01em;margin-top:6px}
-  .unlisted-row{opacity:.6}
-  .unlisted-toggle{margin-top:14px}
-  .unlisted-toggle summary{cursor:pointer;font-size:12px;color:var(--muted);
-    list-style:none;padding:10px 2px}
-  .unlisted-toggle summary::-webkit-details-marker{display:none}
-  .unlisted-toggle summary::before{content:"▸ ";display:inline-block;transition:transform .15s ease}
-  .unlisted-toggle[open] summary::before{transform:rotate(90deg)}
-  .unlisted-toggle .unlisted-note{font-size:10.5px;color:var(--muted);line-height:1.5;
-    padding:0 2px 10px}
-  .unlisted-toggle .spotlight{margin-bottom:8px}
+
+  /* Holdings render as flat rows inside one shared card, not a stack of
+     individually-shadowed cards — a long list of boxes-within-a-box reads
+     as noisy clutter, a plain divided list reads as one coherent list. */
+  .holdings-card{padding:6px 14px}
+  .holdings-card .spotlight,.unlisted-body .spotlight{
+    background:none;border:none;border-radius:0;box-shadow:none;
+    padding:12px 0;margin-bottom:0;animation:none}
+  .holdings-card .spotlight:active,.unlisted-body .spotlight:active{background:none;opacity:.7}
+  .holdings-card .spotlight+.spotlight,.unlisted-body .spotlight+.spotlight{
+    border-top:1px solid var(--line-soft)}
+
+  .unlisted-card{padding:0}
+  .unlisted-card summary{display:flex;align-items:center;gap:8px;cursor:pointer;
+    list-style:none;padding:14px}
+  .unlisted-card summary::-webkit-details-marker{display:none}
+  .unlisted-card summary h3{margin:0;flex:1}
+  .unlisted-count{font-size:11px;font-weight:700;color:var(--muted);background:var(--card-2);
+    border:1px solid var(--line-soft);border-radius:999px;padding:2px 8px}
+  .unlisted-card summary .chev{width:16px;height:16px;color:var(--muted);flex:none;
+    transition:transform .15s ease}
+  .unlisted-card[open] summary .chev{transform:rotate(180deg)}
+  .unlisted-body{padding:0 14px 14px}
+  .unlisted-body .unlisted-note{font-size:11px;margin:0 0 2px}
+  .unlisted-row{opacity:.65}
 
   /* ---------- Detail screen ---------- */
   /* No in-page back button — Telegram's own native BackButton (wired in JS
@@ -1137,9 +1152,9 @@
           <span class="k">Wallet</span>
           <span class="addr addrtext">${esc(truncAddr(data.address))}</span>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>
-        </button>` : ""}
-      </div>
-      <div class="feenote">Non-custodial — this is your wallet, held in your connected app.<br/>TON Board never has access to your funds.</div>`);
+        </button>
+        <div class="trustnote">Non-custodial — this is your wallet. TON Board never has access to your funds.</div>` : ""}
+      </div>`);
 
     if (!data.holdings.length && !data.unlisted.length) {
       body.innerHTML = `<div class="state"><p>No tokens yet — buy your first one from Trending.</p></div>`;
@@ -1147,14 +1162,20 @@
     }
 
     const holdingsHtml = data.holdings.length
-      ? data.holdings.map(portfolioRow).join("")
+      ? `<div class="dcard holdings-card">${data.holdings.map(portfolioRow).join("")}</div>`
       : `<div class="state"><p>No tokens yet — buy your first one from Trending.</p></div>`;
 
     const unlistedHtml = data.unlisted.length ? `
-      <details class="unlisted-toggle">
-        <summary>Other tokens (${data.unlisted.length})</summary>
-        <div class="unlisted-note">No market data — often unsolicited airdrops. Kept separate from your real holdings above.</div>
-        ${data.unlisted.map(unlistedRow).join("")}
+      <details class="dcard unlisted-card">
+        <summary>
+          <h3>Other tokens</h3>
+          <span class="unlisted-count">${data.unlisted.length}</span>
+          <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+        </summary>
+        <div class="unlisted-body">
+          <p class="desc unlisted-note">No market data — often unsolicited airdrops, kept separate from your real holdings above.</p>
+          ${data.unlisted.map(unlistedRow).join("")}
+        </div>
       </details>` : "";
 
     body.innerHTML = holdingsHtml + unlistedHtml;
