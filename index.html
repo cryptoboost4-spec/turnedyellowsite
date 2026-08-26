@@ -53,7 +53,8 @@
   @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(61,220,151,.45)}
     70%{box-shadow:0 0 0 6px rgba(61,220,151,0)}100%{box-shadow:0 0 0 0 rgba(61,220,151,0)}}
   @media (prefers-reduced-motion:reduce){.live .dot{animation:none}}
-  #ton-connect-button{margin-left:auto;flex:none;max-width:150px}
+  #ton-connect-button{flex:none;max-width:150px}
+  .headicon{margin-left:auto}
 
   /* ---------- Screen stack (Telegram-style push navigation) ---------- */
   .screens{position:relative;flex:1;min-height:0;overflow:hidden}
@@ -63,6 +64,8 @@
   #screen-list.behind{transform:translateX(-22%);pointer-events:none}
   #screen-detail{transform:translateX(100%)}
   #screen-detail.active{transform:translateX(0)}
+  #screen-portfolio{transform:translateX(100%)}
+  #screen-portfolio.active{transform:translateX(0)}
   @media (prefers-reduced-motion:reduce){.screen{transition:none}}
 
   /* ---------- Top bar (per-screen, below the persistent app header) ---------- */
@@ -185,6 +188,11 @@
     line-height:1.6}
   .state svg{opacity:.45}
   .state b{color:var(--text)}
+
+  /* ---------- Portfolio screen ---------- */
+  .portfolio-head{text-align:center;padding:22px 14px}
+  .portfolio-head .k{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+  .portfolio-total{font-size:32px;font-weight:700;letter-spacing:-.01em;margin-top:6px}
 
   /* ---------- Detail screen ---------- */
   .detail-topbar{position:sticky;top:0;z-index:5;background:rgba(14,22,33,.92);
@@ -342,6 +350,9 @@
     <div class="diamond"></div>
     <span class="brandname">TON Board</span>
     <span class="live" id="liveIndicator" title="live"><span class="dot"></span></span>
+    <button class="iconbtn headicon" id="portfolioBtn" onclick="showPortfolio()" aria-label="My Coins" title="My Coins">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><path d="M2 13h20"/></svg>
+    </button>
     <div id="ton-connect-button"></div>
   </div>
 
@@ -391,6 +402,14 @@
       <button class="backpill" onclick="showList()">‹ Back</button>
     </div>
     <div class="detail-content" id="detailContent"></div>
+  </div>
+
+  <!-- ===================== PORTFOLIO SCREEN ===================== -->
+  <div class="screen" id="screen-portfolio">
+    <div class="detail-topbar">
+      <button class="backpill" onclick="showList()">‹ Back</button>
+    </div>
+    <div class="detail-content" id="portfolioContent"></div>
   </div>
   </div>
 
@@ -871,10 +890,95 @@
   window.showList = function(){
     tg?.HapticFeedback?.impactOccurred?.("light");
     document.getElementById("screen-detail").classList.remove("active");
+    document.getElementById("screen-portfolio").classList.remove("active");
     document.getElementById("screen-list").classList.remove("behind");
     tg?.BackButton?.hide();
     window.hideMainButton?.();
   };
+
+  window.showPortfolio = function(){
+    tg?.HapticFeedback?.impactOccurred?.("light");
+    document.getElementById("screen-portfolio").classList.add("active");
+    document.getElementById("screen-list").classList.add("behind");
+    document.getElementById("screen-portfolio").scrollTop = 0;
+    tg?.BackButton?.show();
+    renderPortfolio();
+  };
+
+  const fmtAmount = (n) => {
+    n = Number(n) || 0;
+    if (n >= 1000) return n.toLocaleString(undefined, { maximumFractionDigits: 2 });
+    if (n >= 1) return n.toLocaleString(undefined, { maximumFractionDigits: 4 });
+    return n.toLocaleString(undefined, { maximumFractionDigits: 8 });
+  };
+
+  function portfolioRow(h){
+    const img = h.imageUrl
+      ? `<img src="${esc(h.imageUrl)}" loading="lazy" alt="" onerror="this.parentElement.innerHTML='<div class=fallback>${esc((h.symbol||'?')[0])}</div>'"/>`
+      : `<div class="fallback">${esc((h.symbol||"?")[0])}</div>`;
+    const idx = allCoins.findIndex(c => c.tokenAddress === h.address);
+    const isTon = h.kind === "Ton";
+    const tag = isTon ? "div" : "button";
+    const onclick = isTon ? "" : idx >= 0
+      ? ` onclick="showDetail(${idx})"`
+      : ` onclick="window.open('${esc(buyUrl(h.address))}','_blank')"`;
+    return `
+      <${tag} class="spotlight"${onclick}>
+        <div class="spot-media">${img}</div>
+        <div class="spot-body">
+          <div class="spot-top"><span class="spot-name">${esc(h.name)}</span></div>
+          <div class="spot-ticker">${fmtAmount(h.amount)} $${esc(h.symbol)}</div>
+        </div>
+        <div class="spot-stats">
+          <div class="spot-price tabular">${h.usd > 0 ? fmtUsd(h.usd) : "—"}</div>
+        </div>
+      </${tag}>`;
+  }
+
+  async function renderPortfolio(){
+    const box = document.getElementById("portfolioContent");
+    if (!box) return;
+    box.innerHTML = `
+      <div id="portfolioBody">
+        <div class="spotlight spot-skel skel"></div>
+        <div class="spotlight spot-skel skel"></div>
+        <div class="spotlight spot-skel skel"></div>
+      </div>`;
+
+    // The wallet module (wallet-bundle.js) loads as a separate deferred
+    // script — give it a moment to finish before deciding it's unavailable.
+    for (let tries = 0; tries < 20 && !window.loadPortfolio; tries++) await sleep(200);
+    const body = document.getElementById("portfolioBody");
+    if (!body) return; // user navigated away while waiting
+
+    if (!window.isWalletConnected?.()) {
+      body.innerHTML = `<div class="state"><p>Connect your wallet to see what you hold.</p>
+        <button class="buy" style="margin-top:14px" onclick="window.connectWallet?.()">Connect Wallet</button></div>`;
+      return;
+    }
+    if (!window.loadPortfolio) {
+      body.innerHTML = `<div class="state"><p>Wallet module unavailable — try reloading.</p></div>`;
+      return;
+    }
+
+    const data = await window.loadPortfolio();
+    if (document.getElementById("portfolioBody") !== body) return; // navigated away meanwhile
+    if (!data) {
+      body.innerHTML = `<div class="state"><p>Couldn't load your holdings — try again in a moment.</p></div>`;
+      return;
+    }
+
+    box.insertAdjacentHTML("afterbegin", `
+      <div class="dcard portfolio-head">
+        <div class="k">Portfolio value</div>
+        <div class="portfolio-total tabular">${fmtUsd(data.totalUsd)}</div>
+      </div>`);
+    if (!data.holdings.length) {
+      body.innerHTML = `<div class="state"><p>No tokens yet — buy your first one from Trending.</p></div>`;
+      return;
+    }
+    body.innerHTML = data.holdings.map(portfolioRow).join("");
+  }
 
   window.setSort = function(mode){
     tg?.HapticFeedback?.selectionChanged?.();
@@ -1092,6 +1196,6 @@
      Still not live-tested end-to-end with a real wallet approving a real
      transaction — the "Having trouble?" link on the Buy button is a
      working fallback to STON.fi's own swap page if anything here breaks. -->
-<script src="wallet-bundle.js?v=9"></script>
+<script src="wallet-bundle.js?v=10"></script>
 </body>
 </html>

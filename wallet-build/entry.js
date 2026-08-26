@@ -240,6 +240,49 @@ async function fetchWalletAssets(address) {
   return assets;
 }
 
+window.isWalletConnected = function () {
+  return !!tonConnectUI?.connected;
+};
+window.connectWallet = function () {
+  tonConnectUI?.openModal();
+};
+
+// Every non-zero balance in the wallet (including native TON), priced in
+// USD from STON.fi's own feed — powers the Portfolio screen. Separate
+// from loadBalance()/balanceState above, which only track the single
+// asset relevant to the current Buy/Sell screen.
+window.loadPortfolio = async function () {
+  if (!apiClient || !tonConnectUI?.connected) return null;
+  try {
+    const address = tonConnectUI.wallet?.account?.address;
+    const assets = await fetchWalletAssets(address);
+    const holdings = [];
+    let totalUsd = 0;
+    for (const a of assets) {
+      if (a.kind === "NotAnAsset" || !a.balance || a.balance === "0") continue;
+      const decimals = a.decimals ?? 9;
+      const amount = Number(a.balance) / Math.pow(10, decimals);
+      const price = Number(a.dexPriceUsd ?? a.thirdPartyPriceUsd ?? 0);
+      const usd = amount * price;
+      totalUsd += usd;
+      holdings.push({
+        address: a.contractAddress,
+        kind: a.kind,
+        symbol: a.symbol,
+        name: a.displayName || a.symbol,
+        imageUrl: a.imageUrl || null,
+        amount,
+        usd,
+      });
+    }
+    holdings.sort((a, b) => b.usd - a.usd);
+    return { totalUsd, holdings };
+  } catch (e) {
+    console.error("Portfolio load failed:", e, "response body:", e?.data);
+    return null;
+  }
+};
+
 async function loadBalance() {
   const coin = window.currentDetailCoin;
   if (!coin || !tonConnectUI?.connected || !apiClient) return;
