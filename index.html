@@ -209,6 +209,42 @@
   body.in-telegram .detail-topbar{display:none}
   .detail-content{padding:14px 14px 40px}
 
+  /* Manually-curated hero backdrop (see content.js) — only renders for
+     tokens someone has actually designed one for, so most tokens keep the
+     plain .tokhead below instead of a stretched/blurred placeholder. */
+  .detail-hero{position:relative;height:190px;background-size:cover;background-position:center;
+    margin-bottom:14px}
+  .detail-hero[hidden]{display:none}
+  .detail-hero::after{content:"";position:absolute;inset:0;
+    background:linear-gradient(180deg, rgba(14,22,33,.05) 0%, rgba(14,22,33,.35) 55%, var(--bg) 100%)}
+  .hero-inner{position:absolute;left:14px;right:14px;bottom:14px;z-index:1;
+    display:flex;align-items:center;gap:12px}
+  .hero-inner .icon{width:50px;height:50px;border-radius:13px;flex:none;overflow:hidden;
+    background:var(--card-2);border:2px solid rgba(255,255,255,.18);box-shadow:0 4px 14px rgba(0,0,0,.4)}
+  .hero-inner .icon img{width:100%;height:100%;object-fit:cover}
+  .hero-inner .nm{font-size:18px;font-weight:800;color:#fff;letter-spacing:-.01em;
+    text-shadow:0 1px 6px rgba(0,0,0,.55)}
+  .hero-inner .tk{font-size:12.5px;color:rgba(255,255,255,.88);margin-top:2px;
+    text-shadow:0 1px 4px rgba(0,0,0,.5)}
+  .hero-tagline{position:absolute;left:14px;right:14px;top:14px;z-index:1;font-size:12.5px;
+    font-weight:600;color:#fff;text-shadow:0 1px 6px rgba(0,0,0,.6);line-height:1.4}
+
+  /* ---------- Theses ---------- */
+  .thesis-list{display:flex;flex-direction:column;gap:12px}
+  .thesis{background:var(--card-2);border:1px solid var(--line-soft);border-radius:12px;padding:12px}
+  .thesis-head{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+  .thesis-avatar{width:26px;height:26px;border-radius:50%;flex:none;overflow:hidden;
+    background:var(--card-press);display:block}
+  .thesis-avatar img{width:100%;height:100%;object-fit:cover;display:block}
+  .thesis-avatar .fallback{width:100%;height:100%;display:flex;align-items:center;justify-content:center;
+    font-size:11px;font-weight:700;color:var(--ton-b)}
+  .thesis-author{font-size:12.5px;font-weight:600;color:var(--text)}
+  .thesis-date{font-size:10.5px;color:var(--muted);margin-top:1px}
+  .thesis-title{font-size:13.5px;font-weight:700;margin-bottom:6px;letter-spacing:-.005em}
+  .thesis-body{font-size:12.5px;line-height:1.65;color:#C7CEDB;white-space:pre-wrap;margin:0}
+  .thesis-source{display:inline-block;margin-top:9px;font-size:11px;font-weight:600;
+    color:var(--ton-b);text-decoration:none}
+
   .dcard{background:var(--card);border:1px solid var(--line);border-radius:16px;
     padding:14px;margin-bottom:12px;box-shadow:0 8px 22px -10px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.03)}
   .dcard h3{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);
@@ -235,8 +271,9 @@
   .tokhead{display:flex;align-items:center;gap:10px;margin-bottom:14px}
   .tokhead .icon{width:44px;height:44px;border-radius:12px;flex:none;overflow:hidden;
     background:var(--card-2)}
-  .tokhead .icon img{width:100%;height:100%;object-fit:cover}
-  .tokhead .icon .fallback{width:100%;height:100%;display:flex;align-items:center;justify-content:center;
+  .tokhead .icon img,.hero-inner .icon img{width:100%;height:100%;object-fit:cover}
+  .tokhead .icon .fallback,.hero-inner .icon .fallback{width:100%;height:100%;display:flex;
+    align-items:center;justify-content:center;
     background:linear-gradient(135deg, rgba(0,152,234,.35), rgba(0,210,255,.12));
     font-weight:700;font-size:16px}
   .tokhead .nm{font-size:17px;font-weight:700;letter-spacing:-.01em}
@@ -401,6 +438,7 @@
     <div class="detail-topbar">
       <button class="backpill" onclick="showList()">‹ Back</button>
     </div>
+    <div class="detail-hero" id="detailHero" hidden></div>
     <div class="detail-content" id="detailContent"></div>
   </div>
 
@@ -415,6 +453,7 @@
 
 </div>
 
+<script src="content.js"></script>
 <script>
   const tg = window.Telegram?.WebApp;
   if (tg){
@@ -596,6 +635,26 @@
     return `<div class="trust-item"><div class="k">${esc(label)}</div><div class="v ${kind}">${esc(value)}</div></div>`;
   }
 
+  function thesisCard(t){
+    const initial = esc((t.author || "?")[0]);
+    const avatarInner = t.avatarUrl
+      ? `<img src="${esc(t.avatarUrl)}" alt="" loading="lazy" onerror="this.parentElement.innerHTML='<div class=fallback>${initial}</div>'"/>`
+      : `<div class="fallback">${initial}</div>`;
+    return `
+      <div class="thesis">
+        <div class="thesis-head">
+          <span class="thesis-avatar">${avatarInner}</span>
+          <div>
+            <div class="thesis-author">${esc(t.author || "Anonymous")}</div>
+            ${t.date ? `<div class="thesis-date">${esc(t.date)}</div>` : ""}
+          </div>
+        </div>
+        ${t.title ? `<div class="thesis-title">${esc(t.title)}</div>` : ""}
+        <p class="thesis-body">${esc(t.body || "")}</p>
+        ${t.sourceUrl ? `<a class="thesis-source" href="${esc(t.sourceUrl)}" target="_blank" rel="noopener">View original →</a>` : ""}
+      </div>`;
+  }
+
   const LINK_ICONS = {
     website: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a15 15 0 0 1 0 18a15 15 0 0 1 0-18z"/></svg>',
   };
@@ -649,14 +708,53 @@
       iconLink(coin.twitter ? `https://x.com/${coin.twitter}` : null, "x", "X"),
     ].filter(Boolean);
 
+    // Manually-curated content (content.js) — see that file for the shape.
+    // Nothing here is pulled from any API; a token with no entry just
+    // renders the plain default page below.
+    const content = (typeof TOKEN_CONTENT !== "undefined" && TOKEN_CONTENT[coin.tokenAddress]) || null;
+
+    const heroEl = document.getElementById("detailHero");
+    if (heroEl) {
+      if (content?.hero) {
+        heroEl.hidden = false;
+        heroEl.style.backgroundImage = `url("${esc(content.hero)}")`;
+        heroEl.innerHTML = `
+          ${content.tagline ? `<div class="hero-tagline">${esc(content.tagline)}</div>` : ""}
+          <div class="hero-inner">
+            <div class="icon">${tokenIconHtml(coin)}</div>
+            <div>
+              <div class="nm">${esc(coin.name)}</div>
+              <div class="tk">$${esc(coin.symbol)}</div>
+            </div>
+          </div>`;
+      } else {
+        heroEl.hidden = true;
+        heroEl.style.backgroundImage = "";
+        heroEl.innerHTML = "";
+      }
+    }
+
+    const description = content?.description
+      ? `<p class="desc">${esc(content.description)}</p>`
+      : coin.description
+      ? `<p class="desc">${esc(coin.description).slice(0,320)}${coin.description.length>320?'…':''}</p>`
+      : `<p class="desc" style="color:var(--muted)">No description available.</p>`;
+
+    const thesesHtml = content?.theses?.length ? `
+      <div class="dcard">
+        <h3>Theses</h3>
+        <div class="thesis-list">${content.theses.map(thesisCard).join("")}</div>
+      </div>` : "";
+
     document.getElementById("detailContent").innerHTML = `
+      ${content?.hero ? "" : `
       <div class="tokhead">
         <div class="icon">${tokenIconHtml(coin)}</div>
         <div>
           <div class="nm">${esc(coin.name)}</div>
           <div class="tk addr">$${esc(coin.symbol)}</div>
         </div>
-      </div>
+      </div>`}
       <div class="metarow">
         <div class="addrrow" onclick="window.copyAddr?.('${esc(coin.tokenAddress)}', this)">
           <span class="addr addrtext">${esc(truncAddr(coin.tokenAddress))}</span>
@@ -667,8 +765,10 @@
 
       <div class="dcard">
         <h3>About</h3>
-        ${coin.description ? `<p class="desc">${esc(coin.description).slice(0,320)}${coin.description.length>320?'…':''}</p>` : `<p class="desc" style="color:var(--muted)">No description available.</p>`}
+        ${description}
       </div>
+
+      ${thesesHtml}
 
       <div class="dcard">
         <div class="pricehead">
