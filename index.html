@@ -410,7 +410,7 @@
         const isNetworkLevel = e instanceof TypeError;
         if (isNetworkLevel && i < tries - 1) { await sleep(delay); delay *= 2; continue; }
         if (isNetworkLevel) {
-          throw new Error("Network blocked the request (possibly rate-limited, or an ad-blocker/privacy extension is stopping this domain). Try reloading, or try in a private/incognito window.");
+          throw new Error("Network blocked the request — most likely GeckoTerminal's free-tier rate limit (30 requests/minute), tripped by a few taps around the app. Could also be an ad-blocker/privacy extension. Wait about a minute and try again.");
         }
         throw e;
       }
@@ -473,13 +473,13 @@
   function renderCard(coin, idx, delayMs){
     const dir = coin.change24h >= 0 ? "up" : "down";
     const hp = coin.is_honeypot;
-    const badgeText = hp === true ? "Honeypot?" : (coin.launchpad || "New");
+    const badgeText = hp === true ? "Honeypot?" : coin.launchpad;
     const badgeWarn = hp === true;
 
     return `
     <button class="tcard" onclick="showDetail(${idx})" style="animation-delay:${delayMs}ms">
       <div class="tmedia">
-        <span class="tbadge${badgeWarn?' warn':''}">${esc(badgeText)}</span>
+        ${badgeText ? `<span class="tbadge${badgeWarn?' warn':''}">${esc(badgeText)}</span>` : ""}
         ${tokenIconHtml(coin)}
       </div>
       <div class="tbody">
@@ -777,7 +777,21 @@
     el.title = state === "loading" ? "loading" : state === "error" ? "error" : "live";
   }
 
+  let lastLoadAt = 0;
   async function load(){
+    // A full load fires ~11 GeckoTerminal requests in one burst (roughly a
+    // third of their free-tier 30/min budget) — a cooldown here stops an
+    // accidental double-tap on refresh, or an eager pull-to-refresh, from
+    // compounding into a rate-limit error the user didn't really cause.
+    const now = Date.now();
+    if (lastLoadAt && now - lastLoadAt < 10000) {
+      tg?.HapticFeedback?.notificationOccurred?.("warning");
+      const btn0 = document.getElementById("refreshBtn");
+      if (btn0) { btn0.classList.add("spin"); setTimeout(() => btn0.classList.remove("spin"), 300); }
+      return;
+    }
+    lastLoadAt = now;
+
     const btn = document.getElementById("refreshBtn");
     btn.classList.add("spin");
     setLive("loading");
@@ -818,9 +832,14 @@
 
       if (!picks.length) throw new Error("no pools returned");
 
-      // Step 2: rich token info per pick, in parallel
-      const infos = await Promise.all(picks.map(p =>
-        fetchJson(`${GT_BASE}/networks/${NETWORK}/tokens/${p.tokenAddress}/info`).catch(() => null)
+      // Step 2: rich token info per pick. Staggered (not all fired in the
+      // same instant) — GeckoTerminal's free tier caps at 30 requests/min,
+      // and 10 simultaneous connections in one burst is more likely to trip
+      // abuse detection than the same 10 requests spread over ~1.5s.
+      const infos = await Promise.all(picks.map((p, i) =>
+        sleep(i * 150).then(() =>
+          fetchJson(`${GT_BASE}/networks/${NETWORK}/tokens/${p.tokenAddress}/info`).catch(() => null)
+        )
       ));
 
       allCoins = picks.map((p, i) => {
