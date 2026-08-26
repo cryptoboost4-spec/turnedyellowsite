@@ -26,6 +26,15 @@ import { StonApiClient } from "@ston-fi/api";
 const REFERRAL_ADDRESS = "EQA7NubDDzupeKWC-hmTlCugHfySLrxftL9cwImY_wVPYMG9";
 const REFERRAL_VALUE = 30; // units of 0.01% => 0.30%
 
+// STON.fi's REST API rejects the literal string "ton" for offer/ask
+// address ("Failed to deserialize query string: offer_address: invalid
+// jetton address" — confirmed live) despite their docs' placeholder text
+// implying it's accepted. This is the real value: the native-TON
+// pseudo-address their own reference demo app uses
+// (examples/next-js-app/constants.ts in ston-fi/sdk on GitHub) — same
+// address that shows up as "Toncoin" itself in GeckoTerminal's listings.
+const TON_PSEUDO_ADDRESS = "EQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAM9c";
+
 const manifestUrl = new URL("tonconnect-manifest.json", window.location.href).toString();
 
 // Telegram's own bottom-bar action button — feels native when this app is
@@ -135,7 +144,7 @@ window.previewSwap = function () {
     if (myToken !== previewToken) return; // a newer keystroke superseded this one
     try {
       const sim = await apiClient.simulateSwap({
-        offerAddress: "ton",
+        offerAddress: TON_PSEUDO_ADDRESS,
         askAddress: coin.tokenAddress,
         offerUnits: nano,
         slippageTolerance: "0.01",
@@ -263,7 +272,7 @@ window.handleBuy = async function () {
 
   try {
     const simulationResult = await apiClient.simulateSwap({
-      offerAddress: "ton",
+      offerAddress: TON_PSEUDO_ADDRESS,
       askAddress: coin.tokenAddress,
       offerUnits: nano,
       slippageTolerance: "0.01",
