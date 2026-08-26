@@ -78,6 +78,8 @@
   #screen-detail.active{transform:translateX(0)}
   #screen-portfolio{transform:translateX(100%)}
   #screen-portfolio.active{transform:translateX(0)}
+  #screen-watchlist{transform:translateX(100%)}
+  #screen-watchlist.active{transform:translateX(0)}
   @media (prefers-reduced-motion:reduce){.screen{transition:none}}
 
   /* ---------- Top bar (per-screen, below the persistent app header) ---------- */
@@ -230,6 +232,25 @@
   .unlisted-body{padding:0 14px 14px}
   .unlisted-body .unlisted-note{font-size:11px;margin:0 0 2px}
   .unlisted-row{opacity:.65}
+
+  /* ---------- Watchlist screen ---------- */
+  .watchlist-head{display:flex;align-items:center;justify-content:space-between;
+    padding:2px 2px 14px}
+  .watchlist-head h2{font-size:21px;font-weight:700;margin:0;letter-spacing:-.01em}
+  .watch-star{flex:none;width:34px;height:34px;border-radius:10px;background:var(--card-2);
+    border:1px solid var(--line-soft);display:flex;align-items:center;justify-content:center;
+    color:var(--muted);transition:transform .12s ease}
+  .watch-star:active{transform:scale(.9)}
+  .watch-star svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.6}
+  .watch-star.watched{color:var(--warn);border-color:rgba(245,185,66,.35);background:rgba(245,185,66,.1)}
+  .watch-star.watched svg{fill:currentColor}
+
+  /* Detail page's "watch this coin" pill — same shape/size as the
+     Website/Telegram/X link pills it sits alongside in .metarow. */
+  .watch-pill .ibadge svg{fill:none;stroke:currentColor;stroke-width:1.6}
+  .watch-pill.watched{color:var(--warn)}
+  .watch-pill.watched .ibadge{background:rgba(245,185,66,.14);border-color:rgba(245,185,66,.35)}
+  .watch-pill.watched .ibadge svg{fill:currentColor}
 
   /* ---------- Detail screen ---------- */
   /* No in-page back button — Telegram's own native BackButton (wired in JS
@@ -414,6 +435,9 @@
     <div class="diamond"></div>
     <span class="brandname">TON Board</span>
     <span class="live" id="liveIndicator" title="live"><span class="dot"></span></span>
+    <button class="iconbtn headicon" id="watchlistBtn" onclick="showWatchlist()" aria-label="Watchlist" title="Watchlist">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 3l2.6 5.9 6.4.6-4.9 4.2 1.5 6.3-5.6-3.4-5.6 3.4 1.5-6.3-4.9-4.2 6.4-.6z"/></svg>
+    </button>
     <button class="iconbtn headicon" id="portfolioBtn" onclick="showPortfolio()" aria-label="My Coins" title="My Coins">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><path d="M2 13h20"/></svg>
     </button>
@@ -469,6 +493,11 @@
   <div class="screen" id="screen-portfolio">
     <div class="detail-content" id="portfolioContent"></div>
   </div>
+
+  <!-- ===================== WATCHLIST SCREEN ===================== -->
+  <div class="screen" id="screen-watchlist">
+    <div class="detail-content" id="watchlistContent"></div>
+  </div>
   </div>
 
 </div>
@@ -494,6 +523,20 @@
   let searchTerm = '';
   let currentDetailCoin = null;
   let currentChartRange = '24h';
+
+  // ---- Watchlist ----
+  // Local to this browser only — there's no account system, so this is
+  // just localStorage, keyed by contract address. watchlistCache holds
+  // coin data fetched specifically for the Watchlist screen (for a coin
+  // that isn't one of today's top-WANT trending picks in allCoins).
+  const WATCHLIST_KEY = "tonboard_watchlist_v1";
+  let watchlist = new Set();
+  try { watchlist = new Set(JSON.parse(localStorage.getItem(WATCHLIST_KEY) || "[]")); } catch (e) {}
+  const watchlistCache = new Map();
+
+  function saveWatchlist(){
+    try { localStorage.setItem(WATCHLIST_KEY, JSON.stringify([...watchlist])); } catch (e) {}
+  }
   const chartCache = {};
 
   function esc(s){return String(s??"").replace(/[&<>"]/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[m]));}
@@ -527,6 +570,33 @@
     if (hours >= 1) return hours+"h ago";
     return Math.max(1, Math.floor(diff/60000))+"m ago";
   };
+
+  // Shared by load() (top-WANT trending picks) and fetchWatchedCoin() (a
+  // single watched token that may not be one of today's trending picks) —
+  // both call GT's /tokens/{address}/info and need the same fields mapped
+  // out of it.
+  function mapTokenInfo(info, fallbackAddress){
+    return {
+      name: info.name || fallbackAddress.slice(0,10),
+      symbol: (info.symbol || "?").toUpperCase(),
+      description: info.description || "",
+      imageUrl: info.image_url || null,
+      website: info.websites?.[0] || null,
+      telegram: info.telegram_handle || null,
+      twitter: info.twitter_handle || null,
+      gtScore: info.gt_score ?? null,
+      holderCount: info.holders?.count ?? null,
+      holderTop10: info.holders?.distribution_percentage?.top_10 ?? null,
+      is_honeypot: info.is_honeypot === "true" ? true : info.is_honeypot === "false" ? false : null,
+      devHoldingPct: info.developer_holding_percentage ?? null,
+      // Needed to format STON.fi's raw on-chain unit amounts (askUnits
+      // etc.) back into a human token count — jettons don't all use 9
+      // decimals like TON itself. Defaulting to 9 if GT doesn't have it
+      // is a best guess, not verified against a token where it's != 9.
+      decimals: info.decimals ?? 9,
+      launchpad: launchpadFromDescription(info.description),
+    };
+  }
 
   function launchpadFromDescription(desc){
     if (!desc) return null;
@@ -722,6 +792,19 @@
     return `<a class="ilink" href="${esc(url)}" target="_blank" rel="noopener" aria-label="${esc(label)}" title="${esc(label)}">${badge}<span class="ilabel">${esc(label)}</span></a>`;
   }
 
+  // Same pill shape as iconLink()'s Website/Telegram/X links, but an
+  // action (add/remove from watchlist) rather than a link — sits first in
+  // the same row, and unlike those, always renders (nothing to be missing).
+  function watchPill(address){
+    const on = watchlist.has(address);
+    return `<button type="button" class="ilink watch-pill${on ? ' watched' : ''}" data-watch-addr="${esc(address)}"
+      aria-pressed="${on}" aria-label="${on ? 'Remove from watchlist' : 'Add to watchlist'}"
+      onclick="window.toggleWatch('${esc(address)}', this)">
+      <span class="ibadge"><svg viewBox="0 0 24 24"><path d="M12 2.5l2.9 6.7 7.2.6-5.5 4.7 1.7 7-6.3-3.8-6.3 3.8 1.7-7-5.5-4.7 7.2-.6z"/></svg></span>
+      <span class="ilabel watch-label">${on ? 'Watching' : 'Watch'}</span>
+    </button>`;
+  }
+
   function renderDetail(coin){
     const dir = coin.change24h >= 0 ? "up" : "down";
     const hp = coin.is_honeypot;
@@ -763,6 +846,7 @@
     const telegram = content?.telegram || coin.telegram;
     const twitter = content?.twitter || coin.twitter;
     const iconLinks = [
+      watchPill(coin.tokenAddress),
       iconLink(website, "website", "Website"),
       iconLink(telegram ? `https://t.me/${telegram}` : null, "telegram", "Telegram"),
       iconLink(twitter ? `https://x.com/${twitter}` : null, "x", "X"),
@@ -1012,19 +1096,39 @@
     }
   }
 
-  window.showDetail = function(idx){
-    const coin = allCoins[idx];
+  // Exactly one of these three ever gets "active" at a time — they're all
+  // position:absolute over the same rect with no z-index of their own, so
+  // two "active" together stack in DOM order and the top one silently eats
+  // clicks meant for whichever is actually visible underneath. Detail can
+  // now be reached from more than one screen (Trending, Portfolio, and now
+  // Watchlist), so this needs to be a real, explicit switch rather than
+  // each screen only ever adding its own "active".
+  function activateScreen(id){
+    ["screen-detail", "screen-portfolio", "screen-watchlist"].forEach((sid) => {
+      document.getElementById(sid)?.classList.toggle("active", sid === id);
+    });
+    document.getElementById("screen-list").classList.add("behind");
+  }
+
+  // Takes a coin object directly rather than an allCoins index, so any
+  // screen holding its own coin data (Watchlist, in particular, for a
+  // token that isn't one of today's top-WANT trending picks) can open a
+  // detail page without needing that coin to live in allCoins.
+  function openCoinDetail(coin){
     if (!coin) return;
     tg?.HapticFeedback?.impactOccurred?.("light");
     currentDetailCoin = coin;
     window.currentDetailCoin = coin; // exposed for the type=module wallet/swap script below
     renderDetail(coin);
-    document.getElementById("screen-detail").classList.add("active");
-    document.getElementById("screen-list").classList.add("behind");
+    activateScreen("screen-detail");
     document.getElementById("screen-detail").scrollTop = 0;
     tg?.BackButton?.show();
     loadChart("24h");
     window.refreshBuyUi?.();
+  }
+  window.showDetail = function(idx){ openCoinDetail(allCoins[idx]); };
+  window.openWatchlistCoin = function(address){
+    openCoinDetail(allCoins.find(c => c.tokenAddress === address) || watchlistCache.get(address));
   };
   window.copyAddr = function(addr, el){
     navigator.clipboard?.writeText(addr)?.then(() => {
@@ -1042,6 +1146,7 @@
     tg?.HapticFeedback?.impactOccurred?.("light");
     document.getElementById("screen-detail").classList.remove("active");
     document.getElementById("screen-portfolio").classList.remove("active");
+    document.getElementById("screen-watchlist").classList.remove("active");
     document.getElementById("screen-list").classList.remove("behind");
     tg?.BackButton?.hide();
     window.hideMainButton?.();
@@ -1049,11 +1154,40 @@
 
   window.showPortfolio = function(){
     tg?.HapticFeedback?.impactOccurred?.("light");
-    document.getElementById("screen-portfolio").classList.add("active");
-    document.getElementById("screen-list").classList.add("behind");
+    activateScreen("screen-portfolio");
     document.getElementById("screen-portfolio").scrollTop = 0;
     tg?.BackButton?.show();
     renderPortfolio();
+  };
+
+  window.showWatchlist = function(){
+    tg?.HapticFeedback?.impactOccurred?.("light");
+    activateScreen("screen-watchlist");
+    document.getElementById("screen-watchlist").scrollTop = 0;
+    tg?.BackButton?.show();
+    renderWatchlist();
+  };
+
+  // Adds/removes a contract address from the watchlist and keeps every
+  // visible control for that address in sync (the same coin's star can be
+  // on screen in more than one place — the detail page's pill and a
+  // Watchlist row, for instance). Re-renders the Watchlist screen itself
+  // when open, since removing there should drop the row, not just its icon.
+  window.toggleWatch = function(address, el){
+    if (!address) return;
+    const nowWatched = !watchlist.has(address);
+    if (nowWatched) watchlist.add(address); else watchlist.delete(address);
+    saveWatchlist();
+    tg?.HapticFeedback?.impactOccurred?.("light");
+
+    document.querySelectorAll(`[data-watch-addr="${CSS.escape(address)}"]`).forEach((elm) => {
+      elm.classList.toggle("watched", nowWatched);
+      elm.setAttribute("aria-pressed", String(nowWatched));
+      const label = elm.querySelector(".watch-label");
+      if (label) label.textContent = nowWatched ? "Watching" : "Watch";
+    });
+
+    if (document.getElementById("screen-watchlist")?.classList.contains("active")) renderWatchlist();
   };
 
   const fmtAmount = (n) => {
@@ -1181,6 +1315,108 @@
     body.innerHTML = holdingsHtml + unlistedHtml;
   }
 
+  function watchlistRow(coin){
+    const dir = coin.change24h >= 0 ? "up" : "down";
+    const hp = coin.is_honeypot;
+    const badgeText = hp === true ? "Honeypot?" : coin.launchpad;
+    return `
+      <div class="spotlight" onclick="window.openWatchlistCoin('${esc(coin.tokenAddress)}')">
+        <div class="spot-media">${tokenIconHtml(coin)}</div>
+        <div class="spot-body">
+          <div class="spot-top">
+            <span class="spot-name">${esc(coin.name)}</span>
+            ${badgeText ? `<span class="spot-badge${hp===true?' warn':''}">${esc(badgeText)}</span>` : ""}
+          </div>
+          <div class="spot-ticker">$${esc(coin.symbol)}</div>
+        </div>
+        <div class="spot-stats">
+          <div class="spot-price tabular">${compactPriceHtml(coin)}</div>
+          <div class="spot-chg tabular ${dir}">${fmtChg(coin.change24h)}</div>
+        </div>
+        ${watchStarButton(coin.tokenAddress)}
+      </div>`;
+  }
+
+  // A watched address GT couldn't return pool data for (rugged/delisted/
+  // typo'd) — still removable, with an honest reason shown rather than
+  // just vanishing from the list.
+  function watchlistErrorRow(address, error){
+    return `
+      <div class="spotlight">
+        <div class="spot-media"><div class="fallback">?</div></div>
+        <div class="spot-body">
+          <div class="spot-top"><span class="spot-name">${esc(truncAddr(address))}</span></div>
+          <div class="spot-ticker" style="color:var(--down)">${esc(error || "Couldn't load")}</div>
+        </div>
+        ${watchStarButton(address)}
+      </div>`;
+  }
+
+  function watchStarButton(address){
+    return `<button type="button" class="watch-star watched" data-watch-addr="${esc(address)}"
+      aria-pressed="true" aria-label="Remove from watchlist"
+      onclick="event.stopPropagation(); window.toggleWatch('${esc(address)}', this)">
+      <svg viewBox="0 0 24 24"><path d="M12 2.5l2.9 6.7 7.2.6-5.5 4.7 1.7 7-6.3-3.8-6.3 3.8 1.7-7-5.5-4.7 7.2-.6z"/></svg>
+    </button>`;
+  }
+
+  async function renderWatchlist(){
+    const box = document.getElementById("watchlistContent");
+    if (!box) return;
+
+    // The header (with its refresh button) is only written once per visit
+    // to the screen — rewriting it on every call would wipe the button's
+    // "spin" class mid-refresh, since refreshWatchlist() calls back into
+    // this function while the spin is still showing.
+    if (!document.getElementById("watchlistBody")) {
+      box.innerHTML = `
+        <div class="watchlist-head">
+          <h2>Watchlist</h2>
+          <button class="iconbtn" id="watchlistRefreshBtn" onclick="window.refreshWatchlist()" aria-label="Refresh">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3"><path d="M21 12a9 9 0 1 1-2.6-6.36"/><path d="M21 3v6h-6"/></svg>
+          </button>
+        </div>
+        <div id="watchlistBody"></div>`;
+    }
+    const body = document.getElementById("watchlistBody");
+
+    // Most recently added first.
+    const addresses = [...watchlist].reverse();
+    if (!addresses.length) {
+      body.innerHTML = `<div class="state"><p>No coins watched yet — tap "Watch" on any coin's page to add it here.</p></div>`;
+      return;
+    }
+
+    body.innerHTML = addresses.map(() => `<div class="spotlight spot-skel skel"></div>`).join("");
+
+    // A watched coin already sitting in allCoins (today's trending picks)
+    // or the cache needs no fetch at all; anything else gets looked up via
+    // fetchWatchedCoin(), staggered the same way load() staggers its own
+    // per-token requests.
+    const results = await Promise.all(addresses.map((addr, i) => {
+      const known = allCoins.find((c) => c.tokenAddress === addr) || watchlistCache.get(addr);
+      if (known) { watchlistCache.set(addr, known); return Promise.resolve({ addr, coin: known }); }
+      return sleep(i * 150)
+        .then(() => fetchWatchedCoin(addr))
+        .then((coin) => { watchlistCache.set(addr, coin); return { addr, coin }; })
+        .catch((e) => ({ addr, error: e?.message || String(e) }));
+    }));
+
+    if (document.getElementById("watchlistBody") !== body) return; // navigated away meanwhile
+
+    body.innerHTML = `<div class="dcard holdings-card">${results
+      .map((r) => (r.coin ? watchlistRow(r.coin) : watchlistErrorRow(r.addr, r.error)))
+      .join("")}</div>`;
+  }
+
+  window.refreshWatchlist = function(){
+    watchlistCache.clear();
+    document.getElementById("watchlistRefreshBtn")?.classList.add("spin");
+    renderWatchlist().finally(() => {
+      document.getElementById("watchlistRefreshBtn")?.classList.remove("spin");
+    });
+  };
+
   window.setSort = function(mode){
     tg?.HapticFeedback?.selectionChanged?.();
     sortMode = mode;
@@ -1296,27 +1532,7 @@
 
       allCoins = picks.map((p, i) => {
         const info = infos[i]?.data?.attributes || {};
-        return {
-          ...p,
-          name: info.name || p.tokenAddress.slice(0,10),
-          symbol: (info.symbol || "?").toUpperCase(),
-          description: info.description || "",
-          imageUrl: info.image_url || null,
-          website: info.websites?.[0] || null,
-          telegram: info.telegram_handle || null,
-          twitter: info.twitter_handle || null,
-          gtScore: info.gt_score ?? null,
-          holderCount: info.holders?.count ?? null,
-          holderTop10: info.holders?.distribution_percentage?.top_10 ?? null,
-          is_honeypot: info.is_honeypot === "true" ? true : info.is_honeypot === "false" ? false : null,
-          devHoldingPct: info.developer_holding_percentage ?? null,
-          // Needed to format STON.fi's raw on-chain unit amounts (askUnits
-          // etc.) back into a human token count — jettons don't all use 9
-          // decimals like TON itself. Defaulting to 9 if GT doesn't have it
-          // is a best guess, not verified against a token where it's != 9.
-          decimals: info.decimals ?? 9,
-          launchpad: launchpadFromDescription(info.description),
-        };
+        return { ...p, ...mapTokenInfo(info, p.tokenAddress) };
       });
 
       renderGrid();
@@ -1331,6 +1547,45 @@
     } finally {
       btn.classList.remove("spin");
     }
+  }
+
+  // Watchlist coins are picked by the visitor, not ranked by volume, so
+  // unlike load() this can't lean on the network-wide top-pools listing —
+  // most watched coins won't be in it. Same GT endpoints, same response
+  // shape, just scoped to one token: its own top pools (for price/volume/
+  // change/liquidity — same attributes load() reads off the network-wide
+  // listing) plus /info (for name/socials/trust, via the shared mapTokenInfo).
+  async function fetchWatchedCoin(address){
+    const poolsRes = await fetchJson(`${GT_BASE}/networks/${NETWORK}/tokens/${address}/pools?page=1`);
+    const pools = poolsRes?.data || [];
+    // Most-liquid pool wins — the same pool a price/chart for this token
+    // would naturally be quoted against.
+    let pool = null, bestLiq = -1;
+    for (const p of pools) {
+      const liq = Number(p.attributes?.reserve_in_usd) || 0;
+      if (liq > bestLiq) { pool = p; bestLiq = liq; }
+    }
+    if (!pool) throw new Error("No trading pool found for this token yet.");
+
+    const a = pool.attributes || {};
+    const baseAddr = (pool.relationships?.base_token?.data?.id || "").replace(/^ton_/, "");
+    const isBase = baseAddr.toLowerCase() === address.toLowerCase();
+    const picked = {
+      tokenAddress: address,
+      poolAddress: a.address || null,
+      priceUsd: Number(isBase ? a.base_token_price_usd : a.quote_token_price_usd) || 0,
+      change24h: Number(a.price_change_percentage?.h24) || 0,
+      volume24h: Number(a.volume_usd?.h24) || 0,
+      marketCapUsd: a.market_cap_usd != null ? Number(a.market_cap_usd) : null,
+      fdvUsd: a.fdv_usd != null ? Number(a.fdv_usd) : null,
+      liquidityUsd: a.reserve_in_usd != null ? Number(a.reserve_in_usd) : null,
+      poolCreatedAt: a.pool_created_at || null,
+      tx: a.transactions || null,
+    };
+
+    const infoRes = await fetchJson(`${GT_BASE}/networks/${NETWORK}/tokens/${address}/info`).catch(() => null);
+    const info = infoRes?.data?.attributes || {};
+    return { ...picked, ...mapTokenInfo(info, address) };
   }
 
   (function setupPullToRefresh(){
