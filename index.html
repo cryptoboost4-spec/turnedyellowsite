@@ -671,10 +671,9 @@
         </div>
       </div>
 
-      ${hasTrustData ? `
-      <div class="dcard">
+      <div class="dcard" id="trustCard"${hasTrustData ? "" : ' style="display:none"'}>
         <h3>Trust signals</h3>
-        ${trustChips.length ? `<div class="trust">${trustChips.join("")}</div>` : ""}
+        <div class="trust" id="trustChips">${trustChips.join("")}</div>
         ${top10 != null ? `
         <div class="holdercap">
           <span>Top 10 holders: ${top10.toFixed(1)}%</span><span>Rest: ${rest.toFixed(1)}%</span>
@@ -683,8 +682,8 @@
           <span style="width:${top10}%;background:var(--warn)"></span>
           <span style="width:${rest}%;background:var(--ton-a)"></span>
         </div>` : ""}
-        <div class="trustnote">Via GeckoTerminal — displayed as-is, not independently verified by us.</div>
-      </div>` : ""}
+        <div class="trustnote">Via GeckoTerminal and STON.fi — displayed as-is, not independently verified by us.</div>
+      </div>
 
       <div class="dcard">
         <div class="tradetabs">
@@ -705,6 +704,7 @@
           <button class="presetpill" onclick="window.setBuyAmount?.(1)">1</button>
           <button class="presetpill" onclick="window.setBuyAmount?.(2)">2</button>
           <button class="presetpill" onclick="window.setBuyAmount?.(5)">5</button>
+          <button class="presetpill" onclick="window.setMaxBuy?.()">MAX</button>
         </div>
         <div class="presetrow" id="sellPresetRow" hidden>
           <button class="presetpill" onclick="window.setSellFraction?.(0.25)">25%</button>
@@ -734,6 +734,50 @@
       const btn = document.getElementById("buyBtn");
       if (btn) { btn.textContent = "Wallet unavailable — use link below"; btn.disabled = true; }
     }, 4000);
+    loadStonfiTrustSignals(coin);
+  }
+
+  // STON.fi tags every jetton it lists with its own risk signals
+  // (honeypot/suspicious/fake/blacklisted/deprecated, plus a liquidity
+  // tier) — unlike GeckoTerminal's score/holder fields, these actually
+  // populate for TON, and they come from the exchange we route trades
+  // through. Loaded async (needs the wallet bundle's STON.fi client) and
+  // appended to whatever GT-based chips already rendered synchronously.
+  async function loadStonfiTrustSignals(coin){
+    const card = document.getElementById("trustCard");
+    const box = document.getElementById("trustChips");
+    if (!card || !box) return;
+    for (let tries = 0; tries < 20 && !window.loadAssetTrust; tries++) await sleep(200);
+    if (window.currentDetailCoin !== coin || !window.loadAssetTrust) return;
+
+    const asset = await window.loadAssetTrust(coin.tokenAddress);
+    if (window.currentDetailCoin !== coin || !asset) return;
+
+    const tags = asset.tags || [];
+    const riskTags = tags.filter(t => ["asset:honeypot","asset:suspicious","asset:fake"].includes(t));
+    const extra = [];
+
+    if (asset.blacklisted || riskTags.length) {
+      const reason = asset.blacklisted ? "Blacklisted" : riskTags.map(t => t.split(":").pop()).join(", ");
+      extra.push(trustChip("STON.fi flag", reason, "bad"));
+    } else {
+      extra.push(trustChip("STON.fi listing", asset.community ? "Community token" : "Verified", asset.community ? "unk" : "ok"));
+    }
+    if (asset.deprecated) {
+      extra.push(trustChip("Listing status", "Deprecated", "bad"));
+    }
+    const liqTag = tags.find(t => t.startsWith("asset:liquidity:"));
+    if (liqTag) {
+      const tier = liqTag.split(":").pop();
+      const liqLabel = { no: "None", low: "Low", medium: "Medium", high: "High", very_high: "Very high" }[tier] || tier;
+      const liqKind = (tier === "no" || tier === "low") ? "bad" : tier === "medium" ? "unk" : "ok";
+      extra.push(trustChip("STON.fi liquidity", liqLabel, liqKind));
+    }
+
+    if (extra.length) {
+      box.insertAdjacentHTML("beforeend", extra.join(""));
+      card.style.display = "";
+    }
   }
 
   function buildChartSvg(list){
@@ -1048,6 +1092,6 @@
      Still not live-tested end-to-end with a real wallet approving a real
      transaction — the "Having trouble?" link on the Buy button is a
      working fallback to STON.fi's own swap page if anything here breaks. -->
-<script src="wallet-bundle.js?v=8"></script>
+<script src="wallet-bundle.js?v=9"></script>
 </body>
 </html>

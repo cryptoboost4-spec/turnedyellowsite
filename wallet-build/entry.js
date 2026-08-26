@@ -178,6 +178,20 @@ window.toggleSwapDebug = function () {
   btn.textContent = (open ? "▾" : "▸") + " Debug: request & response";
 };
 
+// STON.fi's own per-asset risk data (honeypot/suspicious/fake/blacklisted/
+// deprecated flags, liquidity tier) — exposed for index.html's Trust
+// signals card, which has no other way to reach the STON.fi SDK/apiClient
+// living in this separate bundle.
+window.loadAssetTrust = async function (address) {
+  if (!apiClient) return null;
+  try {
+    return await apiClient.getAsset(address);
+  } catch (e) {
+    console.error("STON.fi asset lookup failed:", e, "response body:", e?.data);
+    return null;
+  }
+};
+
 function buildSimulateUrl(offerAddress, askAddress, units) {
   const p = new URLSearchParams({
     offer_address: offerAddress,
@@ -211,31 +225,45 @@ async function runSimulate(offerAddress, askAddress, nano) {
 }
 
 // ---- Sell-side balance lookup ----
-// STON.fi's asset catalog (getWalletAssets) already knows every jetton
-// balance for a wallet in one call, so there's no need to resolve the
-// user's jetton-wallet contract address ourselves just to read a balance.
+// STON.fi's asset catalog (getWalletAssets) already knows every asset
+// balance for a wallet in one call — including the native TON balance
+// (kind "Ton"), not just jettons — so the same lookup covers both Buy's
+// TON balance and Sell's jetton balance; no need to resolve the user's
+// jetton-wallet contract address ourselves just to read a balance.
 let balanceState = { loading: false, raw: null, decimals: 9, error: null };
+let walletAssetsCache = null; // { address, assets } — cleared on account change or after a trade
 
-async function loadSellBalance() {
+async function fetchWalletAssets(address) {
+  if (walletAssetsCache && walletAssetsCache.address === address) return walletAssetsCache.assets;
+  const assets = await apiClient.getWalletAssets(address);
+  walletAssetsCache = { address, assets };
+  return assets;
+}
+
+async function loadBalance() {
   const coin = window.currentDetailCoin;
   if (!coin || !tonConnectUI?.connected || !apiClient) return;
   const myCoin = coin;
-  balanceState = { loading: true, raw: null, decimals: coin.decimals ?? 9, error: null };
+  const myMode = tradeMode;
+  const decimals = myMode === "buy" ? 9 : (coin.decimals ?? 9);
+  balanceState = { loading: true, raw: null, decimals, error: null };
   updateBalanceHint();
   try {
     const address = tonConnectUI.wallet?.account?.address;
-    const assets = await apiClient.getWalletAssets(address);
-    if (window.currentDetailCoin !== myCoin) return; // user navigated away meanwhile
-    const match = assets.find((a) => a.contractAddress === myCoin.tokenAddress);
+    const assets = await fetchWalletAssets(address);
+    if (window.currentDetailCoin !== myCoin || tradeMode !== myMode) return; // navigated/switched meanwhile
+    const match = myMode === "buy"
+      ? assets.find((a) => a.kind === "Ton")
+      : assets.find((a) => a.contractAddress === myCoin.tokenAddress);
     balanceState = {
       loading: false,
       raw: match?.balance ?? "0",
-      decimals: match?.decimals ?? (myCoin.decimals ?? 9),
+      decimals: match?.decimals ?? decimals,
       error: null,
     };
   } catch (e) {
-    if (window.currentDetailCoin !== myCoin) return;
-    balanceState = { loading: false, raw: null, decimals: myCoin.decimals ?? 9, error: describeError(e) };
+    if (window.currentDetailCoin !== myCoin || tradeMode !== myMode) return;
+    balanceState = { loading: false, raw: null, decimals, error: describeError(e) };
   }
   updateBalanceHint();
 }
@@ -243,13 +271,13 @@ async function loadSellBalance() {
 function updateBalanceHint() {
   const el = document.getElementById("balanceHint");
   if (!el) return;
-  if (tradeMode !== "sell") { el.textContent = ""; return; }
   const coin = window.currentDetailCoin;
   if (!tonConnectUI?.connected) { el.textContent = "Connect wallet to see balance"; return; }
   if (balanceState.loading) { el.textContent = "Loading balance…"; return; }
   if (balanceState.error) { el.textContent = "Balance unavailable"; return; }
   if (balanceState.raw == null) { el.textContent = ""; return; }
-  el.innerHTML = `Balance: <b>${formatDisplayUnits(balanceState.raw, balanceState.decimals)} $${escHtml(coin ? coin.symbol : "")}</b>`;
+  const label = tradeMode === "buy" ? "TON" : "$" + escHtml(coin ? coin.symbol : "");
+  el.innerHTML = `Balance: <b>${formatDisplayUnits(balanceState.raw, balanceState.decimals)} ${label}</b>`;
 }
 
 // ---- Mode switching (Buy <-> Sell) ----
@@ -276,13 +304,32 @@ window.setTradeMode = function (mode) {
 
   resetDebugLog();
   updateBalanceHint();
-  if (mode === "sell") loadSellBalance();
+  loadBalance();
   window.refreshBuyUi?.();
 };
 
 window.setBuyAmount = function (v) {
   const input = document.getElementById("buyAmount");
   if (input) { input.value = v; input.dataset.exactNano = ""; }
+  window.previewSwap?.();
+};
+
+// Reserved out of a Buy MAX so the transaction always has TON left over
+// for its own gas — using the literal full balance would leave nothing to
+// pay the network fee and the swap would fail outright.
+const BUY_GAS_RESERVE_NANO = 300000000n; // 0.3 TON
+
+window.setMaxBuy = function () {
+  const input = document.getElementById("buyAmount");
+  if (!input) return;
+  if (!tonConnectUI?.connected) { tonConnectUI?.openModal(); return; }
+  if (balanceState.raw == null) return;
+
+  const rawBal = BigInt(balanceState.raw);
+  const nano = rawBal > BUY_GAS_RESERVE_NANO ? rawBal - BUY_GAS_RESERVE_NANO : 0n;
+  if (nano <= 0n) return;
+  input.value = (Number(nano) / 1e9).toString();
+  input.dataset.exactNano = nano.toString();
   window.previewSwap?.();
 };
 
@@ -320,7 +367,7 @@ window.previewSwap = function () {
   const input = document.getElementById("buyAmount");
   const offer = offerAsset(coin);
   const ask = askAsset(coin);
-  const nano = (tradeMode === "sell" && input?.dataset.exactNano) || toNanoUnits(input?.value, offer.decimals);
+  const nano = input?.dataset.exactNano || toNanoUnits(input?.value, offer.decimals);
   if (!nano) {
     box.className = "swappreview";
     box.innerHTML = "";
@@ -422,8 +469,9 @@ window.refreshBuyUi = function () {
 
 tonConnectUI?.onStatusChange(() => {
   window.refreshBuyUi?.();
+  walletAssetsCache = null; // wallet/account may have changed
   updateBalanceHint();
-  if (tradeMode === "sell") loadSellBalance();
+  loadBalance();
 });
 
 window.handleTrade = async function () {
@@ -453,13 +501,13 @@ window.handleTrade = async function () {
   const input = document.getElementById("buyAmount");
   const offer = offerAsset(coin);
   const ask = askAsset(coin);
-  const nano = (tradeMode === "sell" && input?.dataset.exactNano) || toNanoUnits(input?.value, offer.decimals);
+  const nano = input?.dataset.exactNano || toNanoUnits(input?.value, offer.decimals);
   if (!nano) {
     statusEl.textContent = tradeMode === "buy" ? "Enter a TON amount first." : "Enter an amount to sell first.";
     statusEl.className = "buystatus err";
     return;
   }
-  if (tradeMode === "sell" && balanceState.raw != null && BigInt(nano) > BigInt(balanceState.raw)) {
+  if (balanceState.raw != null && BigInt(nano) > BigInt(balanceState.raw)) {
     statusEl.textContent = "Amount exceeds your balance.";
     statusEl.className = "buystatus err";
     return;
@@ -521,7 +569,8 @@ window.handleTrade = async function () {
     statusEl.className = "buystatus ok";
     tgApp?.HapticFeedback?.notificationOccurred?.("success");
     if (input) { input.value = ""; input.dataset.exactNano = ""; }
-    if (tradeMode === "sell") loadSellBalance();
+    walletAssetsCache = null; // balance just changed on-chain
+    loadBalance();
   } catch (e) {
     logDebug("Error", describeError(e));
     console.error("Swap failed:", e, "response body:", e?.data);
