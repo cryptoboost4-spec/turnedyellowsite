@@ -193,10 +193,12 @@
   .dcard h3{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);
     margin:0 0 10px;font-weight:600}
   .desc{font-size:12.5px;line-height:1.55;color:#C7CEDB;margin:0 0 12px}
-  .links{display:flex;gap:8px;flex-wrap:wrap}
-  .links a{font-size:11px;font-weight:600;color:var(--ton-b);text-decoration:none;
-    border:1px solid var(--line-soft);background:var(--card-2);
-    border-radius:999px;padding:6px 12px}
+  .ilinks{display:flex;gap:8px;flex-wrap:wrap}
+  .ilink{width:38px;height:38px;flex:none;border-radius:11px;display:flex;
+    align-items:center;justify-content:center;color:var(--ton-b);
+    border:1px solid var(--line-soft);background:var(--card-2);transition:transform .12s ease}
+  .ilink:active{transform:scale(.92);background:var(--card-press)}
+  .ilink svg{width:17px;height:17px}
 
   .tokhead{display:flex;align-items:center;gap:10px;margin-bottom:14px}
   .tokhead .icon{width:44px;height:44px;border-radius:12px;flex:none;overflow:hidden;
@@ -517,6 +519,20 @@
     return `<div class="trust-item"><div class="k">${esc(label)}</div><div class="v ${kind}">${esc(value)}</div></div>`;
   }
 
+  const LINK_ICONS = {
+    dexscreener: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 20V10"/><path d="M6 8V4"/><path d="M12 20V14"/><path d="M12 12V4"/><path d="M18 20V16"/><path d="M18 14V4"/></svg>',
+    gecko: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M11 8v3l2 2"/><path d="M21 21l-3.5-3.5"/></svg>',
+    contract: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 13h6"/><path d="M9 17h6"/></svg>',
+    pool: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2s7 7.58 7 12a7 7 0 0 1-14 0c0-4.42 7-12 7-12z"/></svg>',
+    website: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a15 15 0 0 1 0 18a15 15 0 0 1 0-18z"/></svg>',
+    telegram: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4 20-7z"/></svg>',
+    x: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 4l16 16"/><path d="M20 4L4 20"/></svg>',
+  };
+  function iconLink(url, kind, label){
+    if (!url) return "";
+    return `<a class="ilink" href="${esc(url)}" target="_blank" rel="noopener" aria-label="${esc(label)}" title="${esc(label)}">${LINK_ICONS[kind]}</a>`;
+  }
+
   function explorerUrl(addr){ return "https://tonviewer.com/" + encodeURIComponent(addr); }
   function poolGeckoUrl(pool){ return pool ? "https://www.geckoterminal.com/ton/pools/" + encodeURIComponent(pool) : null; }
   function poolDexscreenerUrl(pool){ return pool ? "https://dexscreener.com/ton/" + encodeURIComponent(pool) : null; }
@@ -530,17 +546,15 @@
     const top10 = coin.holderTop10 != null ? Number(coin.holderTop10) : null;
     const rest = top10 != null ? Math.max(0, 100 - top10) : null;
 
-    const dataLinks = [
-      coin.poolAddress ? `<a href="${poolDexscreenerUrl(coin.poolAddress)}" target="_blank" rel="noopener">Dexscreener</a>` : "",
-      coin.poolAddress ? `<a href="${poolGeckoUrl(coin.poolAddress)}" target="_blank" rel="noopener">GeckoTerminal</a>` : "",
-      `<a href="${explorerUrl(coin.tokenAddress)}" target="_blank" rel="noopener">Contract</a>`,
-      coin.poolAddress ? `<a href="${poolStonfiUrl(coin.poolAddress)}" target="_blank" rel="noopener">Pool</a>` : "",
+    const iconLinks = [
+      iconLink(poolDexscreenerUrl(coin.poolAddress), "dexscreener", "Dexscreener"),
+      iconLink(poolGeckoUrl(coin.poolAddress), "gecko", "GeckoTerminal"),
+      iconLink(explorerUrl(coin.tokenAddress), "contract", "Contract"),
+      iconLink(poolStonfiUrl(coin.poolAddress), "pool", "Pool"),
+      iconLink(coin.website, "website", "Website"),
+      iconLink(coin.telegram ? `https://t.me/${coin.telegram}` : null, "telegram", "Telegram"),
+      iconLink(coin.twitter ? `https://x.com/${coin.twitter}` : null, "x", "X"),
     ].filter(Boolean);
-
-    const socialLinks = [];
-    if (coin.website) socialLinks.push(`<a href="${esc(coin.website)}" target="_blank" rel="noopener">Website</a>`);
-    if (coin.telegram) socialLinks.push(`<a href="https://t.me/${esc(coin.telegram)}" target="_blank" rel="noopener">Telegram</a>`);
-    if (coin.twitter) socialLinks.push(`<a href="https://x.com/${esc(coin.twitter)}" target="_blank" rel="noopener">X</a>`);
 
     document.getElementById("detailContent").innerHTML = `
       <div class="tokhead">
@@ -558,8 +572,7 @@
       <div class="dcard">
         <h3>About</h3>
         ${coin.description ? `<p class="desc">${esc(coin.description).slice(0,320)}${coin.description.length>320?'…':''}</p>` : `<p class="desc" style="color:var(--muted)">No description available.</p>`}
-        <div class="links">${dataLinks.join("")}</div>
-        ${socialLinks.length ? `<div class="links" style="margin-top:8px">${socialLinks.join("")}</div>` : ""}
+        <div class="ilinks">${iconLinks.join("")}</div>
       </div>
 
       <div class="dcard">
