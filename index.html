@@ -207,6 +207,12 @@
     border:1px solid var(--line-soft);background:var(--card-2);transition:transform .12s ease}
   .ilink:active{transform:scale(.92);background:var(--card-press)}
   .ilink svg{width:17px;height:17px}
+  /* Telegram's mark is a single compound path (blue circle with the plane
+     cut out of it) — needs a light backdrop for that cutout to read as
+     white, the way the real logo looks. */
+  .ilink-telegram{background:#fff;border-color:#fff}
+  .ilink-telegram:active{background:#e8e8e8}
+  .ilink-telegram svg,.ilink-x svg{width:20px;height:20px}
 
   .tokhead{display:flex;align-items:center;gap:10px;margin-bottom:14px}
   .tokhead .icon{width:44px;height:44px;border-radius:12px;flex:none;overflow:hidden;
@@ -531,17 +537,26 @@
   }
 
   const LINK_ICONS = {
-    dexscreener: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 20V10"/><path d="M6 8V4"/><path d="M12 20V14"/><path d="M12 12V4"/><path d="M18 20V16"/><path d="M18 14V4"/></svg>',
-    gecko: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M11 8v3l2 2"/><path d="M21 21l-3.5-3.5"/></svg>',
+    // Dexscreener's real logo is a magnifying glass with a rising
+    // trendline inside — reproduced here (not just a generic search icon).
+    dexscreener: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="10.5" cy="10.5" r="7.5"/><path d="M7 12.5l2-3 2 1.5 2.5-4"/><path d="M21 21l-4.8-4.8"/></svg>',
+    // GeckoTerminal isn't in any verified icon dataset I could check
+    // (their real logo is an illustrated gecko mascot) — using a distinct
+    // terminal-prompt glyph instead of guessing at the mascot shape.
+    gecko: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9l3 3-3 3"/><path d="M12 15h5"/></svg>',
     contract: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 13h6"/><path d="M9 17h6"/></svg>',
     pool: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2s7 7.58 7 12a7 7 0 0 1-14 0c0-4.42 7-12 7-12z"/></svg>',
     website: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a15 15 0 0 1 0 18a15 15 0 0 1 0-18z"/></svg>',
-    telegram: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4 20-7z"/></svg>',
-    x: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 4l16 16"/><path d="M20 4L4 20"/></svg>',
+    // Real brand marks below, verified against simple-icons (not redrawn
+    // from memory) — rendered in their actual brand color/shape rather
+    // than the app's generic tinted-glyph style.
+    telegram: '<svg viewBox="0 0 24 24"><path fill="#26A5E4" d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/></svg>',
+    x: '<svg viewBox="0 0 24 24"><path fill="#fff" d="M14.234 10.162 22.977 0h-2.072l-7.591 8.824L7.251 0H.258l9.168 13.343L.258 24H2.33l8.016-9.318L16.749 24h6.993zm-2.837 3.299-.929-1.329L3.076 1.56h3.182l5.965 8.532.929 1.329 7.754 11.09h-3.182z"/></svg>',
   };
   function iconLink(url, kind, label){
     if (!url) return "";
-    return `<a class="ilink" href="${esc(url)}" target="_blank" rel="noopener" aria-label="${esc(label)}" title="${esc(label)}">${LINK_ICONS[kind]}</a>`;
+    const brandClass = (kind === "telegram" || kind === "x") ? " ilink-" + kind : "";
+    return `<a class="ilink${brandClass}" href="${esc(url)}" target="_blank" rel="noopener" aria-label="${esc(label)}" title="${esc(label)}">${LINK_ICONS[kind]}</a>`;
   }
 
   function explorerUrl(addr){ return "https://tonviewer.com/" + encodeURIComponent(addr); }
