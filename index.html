@@ -4,6 +4,15 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
 <meta name="theme-color" content="#0E1621" />
+<!-- GitHub Pages doesn't let us set real Cache-Control headers, and both
+     Telegram's WebView and GH Pages' own CDN have repeatedly served a
+     stale copy of this file after a deploy — this is a best-effort ask
+     to not cache the document itself (unlike a browser HTTP header, a
+     meta tag isn't guaranteed to be honored, but it's the only lever
+     available here). -->
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+<meta http-equiv="Pragma" content="no-cache" />
+<meta http-equiv="Expires" content="0" />
 <link rel="icon" type="image/png" href="icon.png" />
 <title>TON Board</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -265,10 +274,6 @@
   .tokhead .nm{font-size:17px;font-weight:700;letter-spacing:-.01em}
   .tokhead .tk{color:var(--muted);font-size:12px;margin-top:1px}
   .metarow{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:2px 0 14px}
-  .addrrow{display:flex;align-items:center;gap:5px;color:var(--muted);font-size:11px}
-  .addrrow svg{width:12px;height:12px;opacity:.6;flex:none}
-  .addrrow.copied{color:var(--up)}
-  .addrrow.copied svg{opacity:1}
 
   .statgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px}
   .stat .k{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;
@@ -769,13 +774,7 @@
                <div class="tk addr">$${esc(coin.symbol)}</div>
              </div>
            </div>`}
-      <div class="metarow">
-        <div class="addrrow" onclick="window.copyAddr?.('${esc(coin.tokenAddress)}', this)">
-          <span class="addr addrtext">${esc(truncAddr(coin.tokenAddress))}</span>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>
-        </div>
-        ${iconLinks.join("")}
-      </div>
+      ${iconLinks.length ? `<div class="metarow">${iconLinks.join("")}</div>` : ""}
 
       <div class="dcard">
         <h3>About</h3>

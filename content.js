@@ -72,6 +72,6 @@
 const TOKEN_CONTENT = {
   "EQBaCgUwOoc6gHCNln_oJzb0mVs79YG7wYoavh-o1ItaneLA": {
     hero: "content/heroes/utya.jpg",
-    bgColor: "#b8e6f6",
+    bgColor: "#b9e6fa",
   },
 };
