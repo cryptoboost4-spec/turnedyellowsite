@@ -71,6 +71,26 @@ try {
   sdkLoadError = e?.message || String(e);
 }
 
+// STON.fi's SDK is built on `ofetch`, which puts the actual parsed
+// response body (the real reason a 400 etc. happened) on `error.data` —
+// not in `error.message`, which is just the status line. A bare "400"
+// with no body text isn't an accurate error, just a status code, so pull
+// the real reason out when it's there.
+function describeError(e) {
+  const parts = [];
+  if (e?.message) parts.push(e.message);
+  const data = e?.data;
+  if (data) {
+    if (typeof data === "string") parts.push(data);
+    else if (data.message) parts.push(String(data.message));
+    else if (data.error) parts.push(typeof data.error === "string" ? data.error : JSON.stringify(data.error));
+    else {
+      try { parts.push(JSON.stringify(data)); } catch { /* not serializable, skip */ }
+    }
+  }
+  return parts.filter(Boolean).join(" — ") || "Swap failed";
+}
+
 function toNanoTon(amountStr) {
   const n = Number(amountStr);
   if (!isFinite(n) || n <= 0) return null;
@@ -80,6 +100,71 @@ function toNanoTon(amountStr) {
 window.setBuyAmount = function (v) {
   const input = document.getElementById("buyAmount");
   if (input) input.value = v;
+  window.previewSwap?.();
+};
+
+// Live preview: how many tokens this buys, price impact, minimum received
+// after slippage. simulateSwap() doesn't need a connected wallet, so this
+// works before Buy is even tappable — and as a side effect, it's also the
+// fastest way to see whether a swap will succeed at all, since it hits the
+// exact same STON.fi endpoint handleBuy() does.
+let previewToken = 0;
+window.previewSwap = function () {
+  const myToken = ++previewToken;
+  const box = document.getElementById("swapPreview");
+  const coin = window.currentDetailCoin;
+  if (!box || !coin) return;
+
+  const amountStr = document.getElementById("buyAmount")?.value;
+  const nano = toNanoTon(amountStr);
+  if (!nano) {
+    box.className = "swappreview";
+    box.innerHTML = "";
+    return;
+  }
+  if (!apiClient) {
+    box.className = "swappreview show";
+    box.innerHTML = `<div class="swappreview-err">Swap engine unavailable${sdkLoadError ? " (" + sdkLoadError + ")" : ""}.</div>`;
+    return;
+  }
+
+  box.className = "swappreview show";
+  box.innerHTML = `<div class="swappreview-loading">Getting a price…</div>`;
+
+  const debounceId = setTimeout(async () => {
+    if (myToken !== previewToken) return; // a newer keystroke superseded this one
+    try {
+      const sim = await apiClient.simulateSwap({
+        offerAddress: "ton",
+        askAddress: coin.tokenAddress,
+        offerUnits: nano,
+        slippageTolerance: "0.01",
+      });
+      if (myToken !== previewToken) return;
+
+      const decimals = coin.decimals ?? 9;
+      const fmt = (units) => {
+        const n = Number(units) / Math.pow(10, decimals);
+        if (!isFinite(n)) return "—";
+        if (n >= 1000) return n.toLocaleString(undefined, { maximumFractionDigits: 2 });
+        if (n >= 1) return n.toLocaleString(undefined, { maximumFractionDigits: 4 });
+        return n.toLocaleString(undefined, { maximumFractionDigits: 8 });
+      };
+      const impactPct = Number(sim.priceImpact) * 100;
+      const impactClass = impactPct >= 10 ? "bad" : impactPct >= 3 ? "warn" : "";
+
+      box.innerHTML = `
+        <div class="swappreview-row"><span class="k">You receive (est.)</span><span class="v">${fmt(sim.askUnits)} $${coin.symbol}</span></div>
+        <div class="swappreview-row"><span class="k">Minimum received</span><span class="v">${fmt(sim.minAskUnits)} $${coin.symbol}</span></div>
+        <div class="swappreview-row"><span class="k">Price impact</span><span class="v ${impactClass}">${impactPct.toFixed(2)}%</span></div>
+        <div class="swappreview-row"><span class="k">Fee</span><span class="v">${(Number(sim.feePercent) || 0).toFixed(2)}%</span></div>
+      `;
+    } catch (e) {
+      if (myToken !== previewToken) return;
+      console.error("Price preview failed:", e, "response body:", e?.data);
+      box.innerHTML = `<div class="swappreview-err">${describeError(e)}</div>`;
+    }
+  }, 500);
 };
 
 // Keeps the in-page Buy button and Telegram's MainButton (when present) in
@@ -216,8 +301,8 @@ window.handleBuy = async function () {
     statusEl.className = "buystatus ok";
     tgApp?.HapticFeedback?.notificationOccurred?.("success");
   } catch (e) {
-    console.error("Swap failed:", e);
-    statusEl.textContent = (e?.message || "Swap failed") + " — try the direct STON.fi link below.";
+    console.error("Swap failed:", e, "response body:", e?.data);
+    statusEl.textContent = describeError(e) + " — try the direct STON.fi link below.";
     statusEl.className = "buystatus err";
     tgApp?.HapticFeedback?.notificationOccurred?.("error");
   } finally {
