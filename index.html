@@ -201,19 +201,23 @@
   .dcard h3{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);
     margin:0 0 10px;font-weight:600}
   .desc{font-size:12.5px;line-height:1.55;color:#C7CEDB;margin:0 0 12px}
-  .ilinks{display:flex;gap:8px;flex-wrap:wrap}
-  .ilink{width:38px;height:38px;flex:none;border-radius:11px;display:flex;
-    align-items:center;justify-content:center;color:var(--ton-b);
-    border:1px solid var(--line-soft);background:var(--card-2);transition:transform .12s ease;
-    overflow:hidden}
-  .ilink:active{transform:scale(.92);background:var(--card-press)}
-  .ilink svg{width:17px;height:17px}
+  /* Sized to match the reference app's pills 1:1 (measured off a real
+     screenshot: ~14px badge in a ~30px-tall capsule, 12px label) — small,
+     content-hugging chips that wrap, not stretched grid cells. */
+  .ilinks{display:flex;flex-wrap:wrap;gap:7px}
+  .ilink{display:inline-flex;align-items:center;gap:7px;border-radius:999px;text-decoration:none;
+    border:1px solid var(--line-soft);background:var(--card-2);padding:7px 11px 7px 10px;
+    transition:transform .12s ease,background .12s ease;overflow:hidden}
+  .ilink:active{transform:scale(.97);background:var(--card-press)}
+  .ilabel{font-size:12px;font-weight:500;color:var(--text);white-space:nowrap}
+  .ibadge{width:14px;height:14px;flex:none;border-radius:4px;display:flex;
+    align-items:center;justify-content:center;color:var(--ton-b);overflow:hidden}
+  .ibadge svg{width:11px;height:11px}
   /* Real app icons (Dexscreener, GeckoTerminal, X, Telegram) — the badge
-     background is baked into the source image itself, so these render
-     full-bleed with no extra border/background of our own on top. */
-  .ilink-img{border:none;background:none;padding:0}
-  .ilink-img img{width:100%;height:100%;object-fit:cover;display:block}
-  .ilink-telegram{border-radius:999px}
+     background is baked into the source image itself, so the image fills
+     the badge slot full-bleed with no extra background of our own. */
+  .ibadge img{width:100%;height:100%;object-fit:cover;display:block}
+  .ibadge-telegram{border-radius:999px}
 
   .tokhead{display:flex;align-items:center;gap:10px;margin-bottom:14px}
   .tokhead .icon{width:44px;height:44px;border-radius:12px;flex:none;overflow:hidden;
@@ -584,10 +588,10 @@
   };
   function iconLink(url, kind, label){
     if (!url) return "";
-    if (LINK_IMAGES[kind]) {
-      return `<a class="ilink ilink-img ilink-${kind}" href="${esc(url)}" target="_blank" rel="noopener" aria-label="${esc(label)}" title="${esc(label)}"><img src="${LINK_IMAGES[kind]}" alt="${esc(label)}" loading="lazy" /></a>`;
-    }
-    return `<a class="ilink" href="${esc(url)}" target="_blank" rel="noopener" aria-label="${esc(label)}" title="${esc(label)}">${LINK_ICONS[kind]}</a>`;
+    const badge = LINK_IMAGES[kind]
+      ? `<span class="ibadge ibadge-${kind}"><img src="${LINK_IMAGES[kind]}" alt="" loading="lazy" /></span>`
+      : `<span class="ibadge">${LINK_ICONS[kind]}</span>`;
+    return `<a class="ilink" href="${esc(url)}" target="_blank" rel="noopener" aria-label="${esc(label)}" title="${esc(label)}">${badge}<span class="ilabel">${esc(label)}</span></a>`;
   }
 
   function explorerUrl(addr){ return "https://tonviewer.com/" + encodeURIComponent(addr); }
