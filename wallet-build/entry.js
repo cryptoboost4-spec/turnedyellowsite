@@ -40,7 +40,7 @@ const manifestUrl = new URL("tonconnect-manifest.json", window.location.href).to
 // Telegram's own bottom-bar action button — feels native when this app is
 // actually opened inside Telegram (initData is only populated in that
 // case; a plain browser hitting this page directly won't have it, so the
-// in-page Buy button stays the primary CTA there instead).
+// in-page trade button stays the primary CTA there instead).
 const tgApp = window.Telegram?.WebApp;
 const inTelegram = !!(tgApp && tgApp.initData);
 if (inTelegram) document.body.classList.add("in-telegram");
@@ -67,7 +67,7 @@ try {
 
 if (inTelegram && tgApp?.MainButton) {
   tgApp.MainButton.setParams({ color: "#0098EA", text_color: "#03131f" });
-  tgApp.MainButton.onClick(() => window.handleBuy?.());
+  tgApp.MainButton.onClick(() => window.handleTrade?.());
 }
 
 let tonClient, apiClient;
@@ -100,10 +100,46 @@ function describeError(e) {
   return parts.filter(Boolean).join(" — ") || "Swap failed";
 }
 
-function toNanoTon(amountStr) {
+function escHtml(s) {
+  return String(s ?? "").replace(/[&<>"]/g, (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[m]));
+}
+
+// Floors rather than rounds so a Sell amount built from this can never come
+// out slightly above what the user typed (or above their balance, for the
+// MAX preset) — a wallet rejection from a rounded-up amount is a worse
+// failure mode than a fractional unit of dust left behind.
+function toNanoUnits(amountStr, decimals) {
   const n = Number(amountStr);
   if (!isFinite(n) || n <= 0) return null;
-  return Math.round(n * 1e9).toString();
+  return Math.floor(n * Math.pow(10, decimals)).toString();
+}
+
+function formatDisplayUnits(units, decimals) {
+  const n = Number(units) / Math.pow(10, decimals);
+  if (!isFinite(n)) return "—";
+  if (n >= 1000) return n.toLocaleString(undefined, { maximumFractionDigits: 2 });
+  if (n >= 1) return n.toLocaleString(undefined, { maximumFractionDigits: 4 });
+  return n.toLocaleString(undefined, { maximumFractionDigits: 8 });
+}
+
+// ---- Trade direction state ----
+// "buy" = TON -> Jetton, "sell" = Jetton -> TON. Both directions share the
+// same amount input, preview panel and debug panel; only which asset is
+// the "offer" side and which is the "ask" side flips.
+let tradeMode = "buy";
+
+function offerAsset(coin) {
+  return tradeMode === "buy"
+    ? { address: TON_PSEUDO_ADDRESS, decimals: 9, symbol: "TON" }
+    : { address: coin.tokenAddress, decimals: coin.decimals ?? 9, symbol: coin.symbol };
+}
+function askAsset(coin) {
+  return tradeMode === "buy"
+    ? { address: coin.tokenAddress, decimals: coin.decimals ?? 9, symbol: coin.symbol }
+    : { address: TON_PSEUDO_ADDRESS, decimals: 9, symbol: "TON" };
+}
+function sideLabel(asset) {
+  return asset.symbol === "TON" ? "TON" : "$" + asset.symbol;
 }
 
 // ---- Debug panel: shows the actual request sent and response received
@@ -152,15 +188,15 @@ function buildSimulateUrl(offerAddress, askAddress, units) {
   return "https://api.ston.fi/v1/swap/simulate?" + p.toString();
 }
 
-// Shared by the live preview and the real Buy flow — both hit the exact
+// Shared by the live preview and the real trade flow — both hit the exact
 // same STON.fi endpoint, so there's one place building the request and
-// logging it to the debug panel instead of two copies that could drift.
-async function runSimulate(coin, nano) {
-  const url = buildSimulateUrl(TON_PSEUDO_ADDRESS, coin.tokenAddress, nano);
+// logging it to the debug panel instead of copies that could drift.
+async function runSimulate(offerAddress, askAddress, nano) {
+  const url = buildSimulateUrl(offerAddress, askAddress, nano);
   try {
     const sim = await apiClient.simulateSwap({
-      offerAddress: TON_PSEUDO_ADDRESS,
-      askAddress: coin.tokenAddress,
+      offerAddress,
+      askAddress,
       offerUnits: nano,
       slippageTolerance: "0.01",
     });
@@ -174,17 +210,106 @@ async function runSimulate(coin, nano) {
   }
 }
 
+// ---- Sell-side balance lookup ----
+// STON.fi's asset catalog (getWalletAssets) already knows every jetton
+// balance for a wallet in one call, so there's no need to resolve the
+// user's jetton-wallet contract address ourselves just to read a balance.
+let balanceState = { loading: false, raw: null, decimals: 9, error: null };
+
+async function loadSellBalance() {
+  const coin = window.currentDetailCoin;
+  if (!coin || !tonConnectUI?.connected || !apiClient) return;
+  const myCoin = coin;
+  balanceState = { loading: true, raw: null, decimals: coin.decimals ?? 9, error: null };
+  updateBalanceHint();
+  try {
+    const address = tonConnectUI.wallet?.account?.address;
+    const assets = await apiClient.getWalletAssets(address);
+    if (window.currentDetailCoin !== myCoin) return; // user navigated away meanwhile
+    const match = assets.find((a) => a.contractAddress === myCoin.tokenAddress);
+    balanceState = {
+      loading: false,
+      raw: match?.balance ?? "0",
+      decimals: match?.decimals ?? (myCoin.decimals ?? 9),
+      error: null,
+    };
+  } catch (e) {
+    if (window.currentDetailCoin !== myCoin) return;
+    balanceState = { loading: false, raw: null, decimals: myCoin.decimals ?? 9, error: describeError(e) };
+  }
+  updateBalanceHint();
+}
+
+function updateBalanceHint() {
+  const el = document.getElementById("balanceHint");
+  if (!el) return;
+  if (tradeMode !== "sell") { el.textContent = ""; return; }
+  const coin = window.currentDetailCoin;
+  if (!tonConnectUI?.connected) { el.textContent = "Connect wallet to see balance"; return; }
+  if (balanceState.loading) { el.textContent = "Loading balance…"; return; }
+  if (balanceState.error) { el.textContent = "Balance unavailable"; return; }
+  if (balanceState.raw == null) { el.textContent = ""; return; }
+  el.innerHTML = `Balance: <b>${formatDisplayUnits(balanceState.raw, balanceState.decimals)} $${escHtml(coin ? coin.symbol : "")}</b>`;
+}
+
+// ---- Mode switching (Buy <-> Sell) ----
+window.setTradeMode = function (mode) {
+  if (mode !== "buy" && mode !== "sell") return;
+  tradeMode = mode;
+  const coin = window.currentDetailCoin;
+
+  document.getElementById("tabBuy")?.classList.toggle("active", mode === "buy");
+  document.getElementById("tabSell")?.classList.toggle("active", mode === "sell");
+  document.getElementById("buyPresetRow")?.toggleAttribute("hidden", mode !== "buy");
+  document.getElementById("sellPresetRow")?.toggleAttribute("hidden", mode !== "sell");
+  document.getElementById("buyBtn")?.classList.toggle("sell-mode", mode === "sell");
+
+  const unitEl = document.getElementById("amountUnit");
+  if (unitEl) unitEl.textContent = mode === "buy" ? "TON" : (coin ? coin.symbol : "");
+
+  const input = document.getElementById("buyAmount");
+  if (input) { input.value = ""; input.dataset.exactNano = ""; }
+  const box = document.getElementById("swapPreview");
+  if (box) { box.className = "swappreview"; box.innerHTML = ""; }
+  const statusEl = document.getElementById("buyStatus");
+  if (statusEl) { statusEl.textContent = ""; statusEl.className = "buystatus"; }
+
+  resetDebugLog();
+  updateBalanceHint();
+  if (mode === "sell") loadSellBalance();
+  window.refreshBuyUi?.();
+};
+
 window.setBuyAmount = function (v) {
   const input = document.getElementById("buyAmount");
-  if (input) input.value = v;
+  if (input) { input.value = v; input.dataset.exactNano = ""; }
   window.previewSwap?.();
 };
 
-// Live preview: how many tokens this buys, price impact, minimum received
-// after slippage. simulateSwap() doesn't need a connected wallet, so this
-// works before Buy is even tappable — and as a side effect, it's also the
-// fastest way to see whether a swap will succeed at all, since it hits the
-// exact same STON.fi endpoint handleBuy() does.
+// Sell presets are fractions of the wallet's current balance (25/50/75%,
+// or MAX) rather than fixed amounts — a user selling almost never thinks
+// in absolute token counts. MAX carries the exact on-chain balance through
+// as a BigInt so it can never be rounded up past what the wallet holds;
+// only the displayed input value goes through float formatting.
+window.setSellFraction = function (fraction) {
+  const input = document.getElementById("buyAmount");
+  if (!input) return;
+  if (!tonConnectUI?.connected) { tonConnectUI?.openModal(); return; }
+  if (balanceState.raw == null) return;
+
+  const rawBal = BigInt(balanceState.raw);
+  const nano = fraction >= 1 ? rawBal : (rawBal * BigInt(Math.round(fraction * 10000))) / 10000n;
+  input.value = (Number(nano) / Math.pow(10, balanceState.decimals)).toString();
+  input.dataset.exactNano = nano.toString();
+  window.previewSwap?.();
+};
+
+// Live preview: how many tokens/TON this trade produces, price impact,
+// minimum received after slippage. simulateSwap() doesn't need a
+// connected wallet, so this works before the trade button is even
+// tappable — and as a side effect, it's the fastest way to see whether a
+// swap will succeed at all, since it hits the exact same STON.fi endpoint
+// handleTrade() does.
 let previewToken = 0;
 window.previewSwap = function () {
   const myToken = ++previewToken;
@@ -192,8 +317,10 @@ window.previewSwap = function () {
   const coin = window.currentDetailCoin;
   if (!box || !coin) return;
 
-  const amountStr = document.getElementById("buyAmount")?.value;
-  const nano = toNanoTon(amountStr);
+  const input = document.getElementById("buyAmount");
+  const offer = offerAsset(coin);
+  const ask = askAsset(coin);
+  const nano = (tradeMode === "sell" && input?.dataset.exactNano) || toNanoUnits(input?.value, offer.decimals);
   if (!nano) {
     box.className = "swappreview";
     box.innerHTML = "";
@@ -208,27 +335,20 @@ window.previewSwap = function () {
   box.className = "swappreview show";
   box.innerHTML = `<div class="swappreview-loading">Getting a price…</div>`;
 
-  const debounceId = setTimeout(async () => {
+  setTimeout(async () => {
     if (myToken !== previewToken) return; // a newer keystroke superseded this one
     resetDebugLog();
     try {
-      const sim = await runSimulate(coin, nano);
+      const sim = await runSimulate(offer.address, ask.address, nano);
       if (myToken !== previewToken) return;
 
-      const decimals = coin.decimals ?? 9;
-      const fmt = (units) => {
-        const n = Number(units) / Math.pow(10, decimals);
-        if (!isFinite(n)) return "—";
-        if (n >= 1000) return n.toLocaleString(undefined, { maximumFractionDigits: 2 });
-        if (n >= 1) return n.toLocaleString(undefined, { maximumFractionDigits: 4 });
-        return n.toLocaleString(undefined, { maximumFractionDigits: 8 });
-      };
+      const fmt = (units) => formatDisplayUnits(units, ask.decimals);
       const impactPct = Number(sim.priceImpact) * 100;
       const impactClass = impactPct >= 10 ? "bad" : impactPct >= 3 ? "warn" : "";
 
       box.innerHTML = `
-        <div class="swappreview-row"><span class="k">You receive (est.)</span><span class="v">${fmt(sim.askUnits)} $${coin.symbol}</span></div>
-        <div class="swappreview-row"><span class="k">Minimum received</span><span class="v">${fmt(sim.minAskUnits)} $${coin.symbol}</span></div>
+        <div class="swappreview-row"><span class="k">You receive (est.)</span><span class="v primary">${fmt(sim.askUnits)} ${sideLabel(ask)}</span></div>
+        <div class="swappreview-row"><span class="k">Minimum received</span><span class="v">${fmt(sim.minAskUnits)} ${sideLabel(ask)}</span></div>
         <div class="swappreview-row"><span class="k">Price impact</span><span class="v ${impactClass}">${impactPct.toFixed(2)}%</span></div>
         <div class="swappreview-row"><span class="k">Fee</span><span class="v">${(Number(sim.feePercent) || 0).toFixed(2)}%</span></div>
       `;
@@ -240,8 +360,8 @@ window.previewSwap = function () {
   }, 500);
 };
 
-// Keeps the in-page Buy button and Telegram's MainButton (when present) in
-// sync with each other — same label, same enabled/progress state.
+// Keeps the in-page trade button and Telegram's MainButton (when present)
+// in sync with each other — same label, same enabled/progress state.
 function setBuyButtonsText(text, opts = {}) {
   const btn = document.getElementById("buyBtn");
   if (btn) {
@@ -271,7 +391,7 @@ window.hideMainButton = function () {
 window.refreshBuyUi = function () {
   const statusEl = document.getElementById("buyStatus");
   // The button disables itself in both failure states below, so a tap
-  // can never reach handleBuy()'s own error text — show the reason here
+  // can never reach handleTrade()'s own error text — show the reason here
   // instead, so it's visible without needing to open the console.
   if (!tonConnectUI) {
     setBuyButtonsText("Wallet unavailable", { disabled: true });
@@ -292,14 +412,21 @@ window.refreshBuyUi = function () {
     return;
   }
   const coin = window.currentDetailCoin;
-  const label = tonConnectUI.connected ? `Buy $${coin ? coin.symbol : ""}` : "Connect wallet to buy";
+  const symbol = coin ? coin.symbol : "";
+  const label = !tonConnectUI.connected
+    ? "Connect wallet to trade"
+    : tradeMode === "buy" ? `Buy $${symbol}` : `Sell $${symbol}`;
   setBuyButtonsText(label, { disabled: false });
   syncMainButtonVisibility();
 };
 
-tonConnectUI?.onStatusChange(() => window.refreshBuyUi?.());
+tonConnectUI?.onStatusChange(() => {
+  window.refreshBuyUi?.();
+  updateBalanceHint();
+  if (tradeMode === "sell") loadSellBalance();
+});
 
-window.handleBuy = async function () {
+window.handleTrade = async function () {
   const coin = window.currentDetailCoin;
   const statusEl = document.getElementById("buyStatus");
   if (!coin || !statusEl) return;
@@ -312,7 +439,7 @@ window.handleBuy = async function () {
 
   if (!tonConnectUI.connected) {
     tonConnectUI.openModal();
-    statusEl.textContent = "Connect your wallet, then tap Buy again.";
+    statusEl.textContent = "Connect your wallet, then try again.";
     statusEl.className = "buystatus";
     return;
   }
@@ -323,9 +450,17 @@ window.handleBuy = async function () {
     return;
   }
 
-  const nano = toNanoTon(document.getElementById("buyAmount")?.value);
+  const input = document.getElementById("buyAmount");
+  const offer = offerAsset(coin);
+  const ask = askAsset(coin);
+  const nano = (tradeMode === "sell" && input?.dataset.exactNano) || toNanoUnits(input?.value, offer.decimals);
   if (!nano) {
-    statusEl.textContent = "Enter a TON amount first.";
+    statusEl.textContent = tradeMode === "buy" ? "Enter a TON amount first." : "Enter an amount to sell first.";
+    statusEl.className = "buystatus err";
+    return;
+  }
+  if (tradeMode === "sell" && balanceState.raw != null && BigInt(nano) > BigInt(balanceState.raw)) {
+    statusEl.textContent = "Amount exceeds your balance.";
     statusEl.className = "buystatus err";
     return;
   }
@@ -336,23 +471,37 @@ window.handleBuy = async function () {
 
   resetDebugLog();
   try {
-    const simulationResult = await runSimulate(coin, nano);
+    const simulationResult = await runSimulate(offer.address, ask.address, nano);
 
     const routerInfo = simulationResult.router;
     const dexContracts = dexFactory(routerInfo);
     const router = tonClient.open(dexContracts.Router.create(routerInfo.address));
     const proxyTon = dexContracts.pTON.create(routerInfo.ptonMasterAddress);
 
-    const txParams = await router.getSwapTonToJettonTxParams({
-      userWalletAddress: tonConnectUI.wallet?.account?.address,
-      offerAmount: simulationResult.offerUnits,
-      minAskAmount: simulationResult.minAskUnits,
-      askJettonAddress: simulationResult.askAddress,
-      proxyTon,
-      referralAddress: REFERRAL_ADDRESS,
-      referralValue: REFERRAL_VALUE,
-      queryId: Date.now(),
-    });
+    let txParams;
+    if (tradeMode === "buy") {
+      txParams = await router.getSwapTonToJettonTxParams({
+        userWalletAddress: tonConnectUI.wallet?.account?.address,
+        offerAmount: simulationResult.offerUnits,
+        minAskAmount: simulationResult.minAskUnits,
+        askJettonAddress: simulationResult.askAddress,
+        proxyTon,
+        referralAddress: REFERRAL_ADDRESS,
+        referralValue: REFERRAL_VALUE,
+        queryId: Date.now(),
+      });
+    } else {
+      txParams = await router.getSwapJettonToTonTxParams({
+        userWalletAddress: tonConnectUI.wallet?.account?.address,
+        offerJettonAddress: simulationResult.offerAddress,
+        offerAmount: simulationResult.offerUnits,
+        minAskAmount: simulationResult.minAskUnits,
+        proxyTon,
+        referralAddress: REFERRAL_ADDRESS,
+        referralValue: REFERRAL_VALUE,
+        queryId: Date.now(),
+      });
+    }
 
     const message = {
       address: txParams.to.toString(),
@@ -371,6 +520,8 @@ window.handleBuy = async function () {
     statusEl.textContent = "Sent — check your wallet for confirmation.";
     statusEl.className = "buystatus ok";
     tgApp?.HapticFeedback?.notificationOccurred?.("success");
+    if (input) { input.value = ""; input.dataset.exactNano = ""; }
+    if (tradeMode === "sell") loadSellBalance();
   } catch (e) {
     logDebug("Error", describeError(e));
     console.error("Swap failed:", e, "response body:", e?.data);
@@ -381,3 +532,7 @@ window.handleBuy = async function () {
     window.refreshBuyUi?.();
   }
 };
+
+// Kept as an alias — index.html's Telegram MainButton wiring and any
+// cached copy of the page may still reference the old name.
+window.handleBuy = window.handleTrade;
