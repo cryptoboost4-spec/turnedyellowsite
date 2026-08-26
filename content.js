@@ -9,15 +9,26 @@
 //
 // Fields:
 //   hero          Full-page background image behind the whole screen (path
-//                 or URL) — fixed in place while the page scrolls, fading
-//                 into the app's normal dark background about 2/3 of the
-//                 way down so the stat/trust/buy cards stay legible.
-//                 Portrait images (~700x1400+) work best since they need
-//                 to fill the whole scrollable screen height, not just a
-//                 banner strip. Only ever shown for tokens someone has
-//                 actually designed one for — there is no auto-generated/
-//                 stretched-logo fallback on purpose.
-//   tagline       Short line shown under the token name when a hero is set.
+//                 or URL) — fixed in place while the page scrolls. Drawn at
+//                 its natural width-scaled aspect ratio (not cropped to
+//                 cover), so design it knowing the token name/icon box is
+//                 skipped entirely for hero tokens — the top of the image
+//                 IS the heading, so put the token's name/branding there
+//                 yourself. Portrait images (~700x1400+) work well since
+//                 they need to fill the whole screen height, not just a
+//                 banner strip.
+//   bgColor       Solid color (hex) matching the flat color your image
+//                 fades/settles to at the bottom — pick it to exactly match
+//                 the image's own lowest pixels. That color becomes the
+//                 background for the rest of the page below the image, so
+//                 there's no visible seam and no fade back to the app's
+//                 normal dark theme — this token's whole page is themed to
+//                 its art. Only used when `hero` is set.
+//   heroSpace     Height in px of the image's own "header zone" (the part
+//                 with the logo/tagline/artwork) — the page's cards start
+//                 below this instead of covering it. Defaults to 380 if
+//                 omitted; tune it to match where your image's header
+//                 content actually ends. Only used when `hero` is set.
 //   description   Replaces the auto-pulled GeckoTerminal description in the
 //                 About card. Unlike the auto one, this isn't truncated —
 //                 write as much as you want.
@@ -37,7 +48,8 @@
 // const TOKEN_CONTENT = {
 //   "EQSomeRealTokenContractAddress...": {
 //     hero: "content/heroes/example.jpg",
-//     tagline: "The first coin to actually ship a product.",
+//     bgColor: "#7ec8f2",
+//     heroSpace: 380,
 //     description: "A longer, hand-written project description that " +
 //       "replaces the short auto-pulled one — background, team, plans, " +
 //       "whatever's worth telling people before they buy.",
