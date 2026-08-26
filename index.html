@@ -932,8 +932,16 @@
   // a small real amount on a real phone before trusting this with real
   // money — the "Having trouble?" link below the Buy button below is a
   // working fallback to STON.fi's own swap page if anything here breaks.
-  import { dexFactory, Client } from "https://esm.sh/@ston-fi/sdk@2.7.0";
-  import { StonApiClient } from "https://esm.sh/@ston-fi/api@0.32.0";
+  //
+  // The STON.fi SDK is loaded with a dynamic import() (not a static
+  // `import` statement) specifically so a CDN failure here is catchable
+  // and shown to the user — and, importantly, so it can't also take down
+  // the TonConnect wallet-connect code below, which doesn't need this SDK
+  // at all. A static import failing anywhere in a module blocks the
+  // *entire* module from running, which is what "wallet unavailable, use
+  // the link below" (the blind 4s fallback in the script above) meant in
+  // practice: not "the wallet failed," but "something on this page threw
+  // during module load, before we could even find out what."
 
   // Same values as REFERRAL_ADDRESS/REFERRAL_VALUE in the script above —
   // duplicated here because a type=module script can't see a classic
@@ -951,8 +959,12 @@
   const inTelegram = !!(tgApp && tgApp.initData);
   if (inTelegram) document.body.classList.add("in-telegram");
 
+  // --- Wallet connect: independent of the swap SDK below, so a CDN
+  // hiccup loading STON.fi's SDK can't also break wallet connect. ---
   let tonConnectUI = null;
+  let connectLoadError = null;
   try {
+    if (!window.TON_CONNECT_UI) throw new Error("TonConnect UI script (unpkg.com) didn't load");
     const TC = window.TON_CONNECT_UI;
     tonConnectUI = new TC.TonConnectUI({
       manifestUrl,
@@ -968,6 +980,7 @@
     });
   } catch (e) {
     console.error("TonConnect UI failed to initialize:", e);
+    connectLoadError = e?.message || String(e);
   }
 
   if (inTelegram && tgApp?.MainButton) {
@@ -975,8 +988,23 @@
     tgApp.MainButton.onClick(() => window.handleBuy?.());
   }
 
-  const tonClient = new Client({ endpoint: "https://toncenter.com/api/v2/jsonRPC" });
-  const apiClient = new StonApiClient();
+  // --- Swap SDK: loaded dynamically so a failure here is catchable and
+  // shown to the user, instead of silently taking the wallet-connect code
+  // above down with it (which is what a static `import` would do). ---
+  let dexFactory, Client, StonApiClient, tonClient, apiClient;
+  let sdkLoadError = null;
+  try {
+    const sdk = await import("https://esm.sh/@ston-fi/sdk@2.7.0");
+    const api = await import("https://esm.sh/@ston-fi/api@0.32.0");
+    dexFactory = sdk.dexFactory;
+    Client = sdk.Client;
+    StonApiClient = api.StonApiClient;
+    tonClient = new Client({ endpoint: "https://toncenter.com/api/v2/jsonRPC" });
+    apiClient = new StonApiClient();
+  } catch (e) {
+    console.error("Failed to load STON.fi swap SDK:", e);
+    sdkLoadError = e?.message || String(e);
+  }
 
   function toNanoTon(amountStr){
     const n = Number(amountStr);
@@ -1010,7 +1038,22 @@
   window.hideMainButton = function(){ if (inTelegram) tgApp?.MainButton?.hide(); };
 
   window.refreshBuyUi = function(){
-    if (!tonConnectUI) { setBuyButtonsText("Wallet unavailable", { disabled: true }); syncMainButtonVisibility(); return; }
+    const statusEl = document.getElementById("buyStatus");
+    // The button disables itself in both failure states below, so a tap
+    // can never reach handleBuy()'s own error text — show the reason here
+    // instead, so it's visible without needing to open the console.
+    if (!tonConnectUI) {
+      setBuyButtonsText("Wallet unavailable", { disabled: true });
+      if (statusEl) { statusEl.textContent = "Wallet connect failed to load (" + (connectLoadError || "unknown error") + ")."; statusEl.className = "buystatus err"; }
+      syncMainButtonVisibility();
+      return;
+    }
+    if (sdkLoadError) {
+      setBuyButtonsText("Swap engine unavailable", { disabled: true });
+      if (statusEl) { statusEl.textContent = "Swap engine failed to load (" + sdkLoadError + ")."; statusEl.className = "buystatus err"; }
+      syncMainButtonVisibility();
+      return;
+    }
     const coin = window.currentDetailCoin;
     const label = tonConnectUI.connected ? `Buy $${coin ? coin.symbol : ""}` : "Connect wallet to buy";
     setBuyButtonsText(label, { disabled: false });
@@ -1022,12 +1065,24 @@
   window.handleBuy = async function(){
     const coin = window.currentDetailCoin;
     const statusEl = document.getElementById("buyStatus");
-    if (!coin || !statusEl || !tonConnectUI) return;
+    if (!coin || !statusEl) return;
+
+    if (!tonConnectUI) {
+      statusEl.textContent = "Wallet connect failed to load (" + (connectLoadError || "unknown error") + ") — use the link below.";
+      statusEl.className = "buystatus err";
+      return;
+    }
 
     if (!tonConnectUI.connected) {
       tonConnectUI.openModal();
       statusEl.textContent = "Connect your wallet, then tap Buy again.";
       statusEl.className = "buystatus";
+      return;
+    }
+
+    if (sdkLoadError) {
+      statusEl.textContent = "Swap engine failed to load (" + sdkLoadError + ") — use the link below.";
+      statusEl.className = "buystatus err";
       return;
     }
 
