@@ -199,28 +199,18 @@
      below) is the only back affordance, so there's just one, not two. */
   .detail-content{padding:14px 14px 40px}
 
-  /* Manually-curated full-screen backdrop (see content.js) — a fixed layer
-     behind the whole scrolling screen (not just a small banner). The image
-     is drawn at its natural aspect ratio (not stretched/cropped to cover),
-     and `background-color` is the curator-picked solid color the image's
-     own bottom fades to — chosen to match exactly, so the image blends
-     into a flat color with no visible seam, and everything scrolled below
-     it stays that same color (not the app's normal dark theme — this
-     token's whole page is themed to its art). #screen-detail always has
-     its own `transform` (the slide-nav CSS below), which makes it the
-     containing block for this fixed child — so it stays pinned to the
-     screen, not the true page, and works with the existing screen-slide
-     navigation. Only renders for tokens someone has actually designed one
-     for — no auto-generated/stretched-logo fallback. */
-  .detail-bg{position:fixed;inset:0;z-index:0;
-    background-repeat:no-repeat;background-position:top center;background-size:100% auto}
-  .detail-bg[hidden]{display:none}
-  .detail-content{position:relative;z-index:1}
-  /* Reserves space at the top of the scrolling content so cards start
-     below the hero image's own heading/artwork instead of covering it —
-     height is set per-token (content.js's heroSpace) since every image's
-     "header zone" is a different height. */
-  .hero-space{width:100%}
+  /* Manually-curated hero (see content.js) — a real in-flow image at the
+     top of the scrolling content (not a CSS background), full-bleed via
+     negative margins that cancel .detail-content's own padding. This is
+     deliberately simpler than a position:fixed backdrop: #screen-detail's
+     own background-color is set (inline, per-token) to the curator-picked
+     solid color the image's own bottom fades to, so the color naturally
+     covers however far the page actually scrolls — no reliance on fixed-
+     position/containing-block behavior, which some mobile WebViews (this
+     runs inside Telegram's, on a range of engines) don't render
+     consistently. Only renders for tokens someone has actually designed
+     one for — no auto-generated/stretched-logo fallback. */
+  .hero-img{display:block;width:calc(100% + 28px);margin:-14px -14px 0;max-width:none}
 
   /* ---------- Theses ---------- */
   .thesis-list{display:flex;flex-direction:column;gap:12px}
@@ -429,7 +419,6 @@
 
   <!-- ===================== DETAIL SCREEN ===================== -->
   <div class="screen" id="screen-detail">
-    <div class="detail-bg" id="detailBg" hidden></div>
     <div class="detail-content" id="detailContent"></div>
   </div>
 
@@ -707,18 +696,11 @@
       iconLink(twitter ? `https://x.com/${twitter}` : null, "x", "X"),
     ].filter(Boolean);
 
-    const bgEl = document.getElementById("detailBg");
-    if (bgEl) {
-      if (content?.hero) {
-        bgEl.hidden = false;
-        bgEl.style.backgroundImage = `url("${esc(content.hero)}")`;
-        bgEl.style.backgroundColor = content.bgColor || "";
-      } else {
-        bgEl.hidden = true;
-        bgEl.style.backgroundImage = "";
-        bgEl.style.backgroundColor = "";
-      }
-    }
+    // The screen's own background-color is set directly (not a CSS
+    // background-image layer) so it reliably covers however far the page
+    // actually scrolls, on any device — see the .hero-img comment above.
+    const screenEl = document.getElementById("screen-detail");
+    if (screenEl) screenEl.style.backgroundColor = content?.hero ? (content.bgColor || "") : "";
 
     const description = content?.description
       ? `<p class="desc">${esc(content.description)}</p>`
@@ -732,17 +714,9 @@
         <div class="thesis-list">${content.theses.map(thesisCard).join("")}</div>
       </div>` : "";
 
-    // heroSpace is a fraction of the rendered width, not a fixed px value —
-    // the image itself scales with screen width (background-size:100%
-    // auto), so the space reserved for it needs to scale the same way or
-    // narrower/wider phones end up with a gap that's too big or too small.
-    const heroSpacePx = content?.hero
-      ? Math.round((Number(content.heroSpace) || 0.85) * (document.getElementById("screen-detail")?.clientWidth || window.innerWidth))
-      : 0;
-
     document.getElementById("detailContent").innerHTML = `
       ${content?.hero
-        ? `<div class="hero-space" style="height:${heroSpacePx}px"></div>`
+        ? `<img class="hero-img" src="${esc(content.hero)}" alt="" />`
         : `<div class="tokhead">
              <div class="icon">${tokenIconHtml(coin)}</div>
              <div>

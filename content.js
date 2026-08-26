@@ -8,33 +8,21 @@
 // all just renders the plain default page.
 //
 // Fields:
-//   hero          Full-page background image behind the whole screen (path
-//                 or URL) — fixed in place while the page scrolls. Drawn at
-//                 its natural width-scaled aspect ratio (not cropped to
-//                 cover), so design it knowing the token name/icon box is
-//                 skipped entirely for hero tokens — the top of the image
-//                 IS the heading, so put the token's name/branding there
-//                 yourself. Portrait images (~700x1400+) work well since
-//                 they need to fill the whole screen height, not just a
-//                 banner strip.
+//   hero          Header image at the top of the page (path or URL) — a
+//                 real image, not a CSS background, so it scrolls normally
+//                 and its own natural height decides how tall it is (no
+//                 space-reservation field to tune). Renders full-bleed
+//                 (edge to edge). Skips the token name/icon box entirely —
+//                 the top of the image IS the heading, so put the token's
+//                 name/branding there yourself.
 //   bgColor       Solid color (hex) matching the flat color your image
 //                 fades/settles to at the bottom — pick it to exactly match
-//                 the image's own lowest pixels. That color becomes the
-//                 background for the rest of the page below the image, so
-//                 there's no visible seam and no fade back to the app's
-//                 normal dark theme — this token's whole page is themed to
-//                 its art. Only used when `hero` is set.
-//   heroSpace     How much of the image's own "header zone" (the part with
-//                 the logo/tagline/artwork) to reserve before the page's
-//                 cards start — as a FRACTION OF SCREEN WIDTH (not a fixed
-//                 px number), since the image itself scales with screen
-//                 width and the reserved space needs to scale the same way
-//                 or it'll drift on narrower/wider phones. To find the
-//                 right value: measure how far down your image (in its own
-//                 native pixels) the header content ends, divide by the
-//                 image's native width, e.g. content ends at 600px down a
-//                 704px-wide image → 600/704 ≈ 0.85. Defaults to 0.85 if
-//                 omitted. Only used when `hero` is set.
+//                 the image's own lowest pixels. Set as the whole screen's
+//                 background-color, so there's no visible seam where the
+//                 image ends and it stays that color (not the app's normal
+//                 dark theme) for however far the page scrolls — this
+//                 token's whole page is themed to its art. Only used when
+//                 `hero` is set.
 //   website       Overrides/fills in the auto-pulled site link (full URL).
 //   telegram      Overrides/fills in the auto-pulled Telegram (handle only,
 //                 no @ or t.me/ — e.g. "utyacoin").
@@ -62,7 +50,6 @@
 //   "EQSomeRealTokenContractAddress...": {
 //     hero: "content/heroes/example.jpg",
 //     bgColor: "#7ec8f2",
-//     heroSpace: 0.85,
 //     website: "https://example.com",
 //     telegram: "examplecoin",
 //     twitter: "examplecoin",
@@ -86,6 +73,5 @@ const TOKEN_CONTENT = {
   "EQBaCgUwOoc6gHCNln_oJzb0mVs79YG7wYoavh-o1ItaneLA": {
     hero: "content/heroes/utya.jpg",
     bgColor: "#b8e6f6",
-    heroSpace: 0.86,
   },
 };
