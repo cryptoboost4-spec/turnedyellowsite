@@ -6,6 +6,9 @@
 <meta name="theme-color" content="#0E1621" />
 <link rel="icon" type="image/png" href="icon.png" />
 <title>TON Board</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@500;600;700&display=swap" rel="stylesheet" />
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <style>
   :root{
@@ -17,7 +20,7 @@
     --text:#F2F6FC; --muted:#8996A8;
     --ton-a:#0098EA; --ton-b:#00D2FF;
     --up:#3DDC97; --down:#FF5D7A; --warn:#F5B942;
-    --font:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    --font:"Quicksand",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
     --font-mono:ui-monospace,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
   }
   *{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
@@ -280,6 +283,19 @@
   .chartbox{height:90px}
   .chart-svg{width:100%;height:90px;display:block}
   .chart-empty{font-size:11px;color:var(--muted);text-align:center;padding:32px 8px;line-height:1.5}
+
+  .txhead{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+  .txhead h3{margin:0}
+  .txperiods{display:flex;gap:4px;background:var(--card-2);border:1px solid var(--line-soft);
+    border-radius:999px;padding:2px}
+  .txp{font-size:10.5px;font-weight:700;color:var(--muted);padding:5px 9px;border-radius:999px}
+  .txp.active{color:#03131f;background:linear-gradient(135deg,var(--ton-a),var(--ton-b))}
+  .txrow + .txrow{margin-top:12px}
+  .txrow-labels{display:flex;justify-content:space-between;font-size:11.5px;color:var(--muted);
+    margin-bottom:5px}
+  .txrow-labels b{color:var(--text);font-weight:700}
+  .txbar{display:flex;height:6px;border-radius:999px;overflow:hidden;background:var(--card-2)}
+  .txbar span{height:100%}
 
   .trust{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
   .trust-item{background:var(--card-2);border:1px solid var(--line-soft);border-radius:9px;
@@ -612,6 +628,35 @@
     return `<div class="trust-item"><div class="k">${esc(label)}</div><div class="v ${kind}">${esc(value)}</div></div>`;
   }
 
+  function txBar(leftLabel, leftVal, rightLabel, rightVal){
+    const total = (leftVal + rightVal) || 1;
+    const leftPct = (leftVal / total) * 100;
+    const rightPct = (rightVal / total) * 100;
+    return `
+      <div class="txrow">
+        <div class="txrow-labels">
+          <span class="tabular"><b>${fmtNum(leftVal)}</b> ${esc(leftLabel)}</span>
+          <span class="tabular">${esc(rightLabel)} <b>${fmtNum(rightVal)}</b></span>
+        </div>
+        <div class="txbar">
+          <span style="width:${leftPct}%;background:var(--up)"></span>
+          <span style="width:${rightPct}%;background:var(--down)"></span>
+        </div>
+      </div>`;
+  }
+  function renderTxBody(p){
+    if (!p) return `<p class="desc" style="color:var(--muted);margin:0">No transaction data for this period.</p>`;
+    return txBar("buys", p.buys || 0, "sells", p.sells || 0) + txBar("buyers", p.buyers || 0, "sellers", p.sellers || 0);
+  }
+  window.setTxPeriod = function(period){
+    tg?.HapticFeedback?.selectionChanged?.();
+    const coin = currentDetailCoin;
+    if (!coin?.tx) return;
+    document.querySelectorAll(".txp").forEach(b => b.classList.toggle("active", b.dataset.p === period));
+    const body = document.getElementById("txBody");
+    if (body) body.innerHTML = renderTxBody(coin.tx[period]);
+  };
+
   function thesisCard(t){
     const initial = esc((t.author || "?")[0]);
     const avatarInner = t.avatarUrl
@@ -758,6 +803,19 @@
           <div class="stat"><div class="k">Pool age</div><div class="v tabular">${esc(fmtAge(coin.poolCreatedAt))}</div></div>
         </div>
       </div>
+
+      ${coin.tx ? `
+      <div class="dcard">
+        <div class="txhead">
+          <h3>Transactions</h3>
+          <div class="txperiods">
+            <button class="txp" data-p="m5" onclick="setTxPeriod('m5')">5M</button>
+            <button class="txp active" data-p="h1" onclick="setTxPeriod('h1')">1H</button>
+            <button class="txp" data-p="h24" onclick="setTxPeriod('h24')">1D</button>
+          </div>
+        </div>
+        <div id="txBody">${renderTxBody(coin.tx.h1)}</div>
+      </div>` : ""}
 
       <div class="dcard" id="trustCard"${hasTrustData ? "" : ' style="display:none"'}>
         <h3>Trust signals</h3>
@@ -1148,6 +1206,7 @@
           fdvUsd: a.fdv_usd != null ? Number(a.fdv_usd) : null,
           liquidityUsd: a.reserve_in_usd != null ? Number(a.reserve_in_usd) : null,
           poolCreatedAt: a.pool_created_at || null,
+          tx: a.transactions || null,
         });
         if (picks.length >= WANT) break;
       }
