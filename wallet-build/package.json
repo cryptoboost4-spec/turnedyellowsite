@@ -1,0 +1,18 @@
+{
+  "name": "ton-board-wallet-build",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Build source for wallet-bundle.js — the wallet-connect + swap logic, bundled locally so the browser never depends on a CDN resolving @ston-fi/sdk's dependency tree at runtime.",
+  "scripts": {
+    "build": "esbuild entry.js --bundle --minify --format=iife --platform=browser --target=es2020 --define:global=globalThis --outfile=../wallet-bundle.js"
+  },
+  "dependencies": {
+    "@ston-fi/api": "^0.32.0",
+    "@ston-fi/sdk": "^2.7.0",
+    "@tonconnect/ui": "^3.0.2",
+    "buffer": "^6.0.3"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2"
+  }
+}
