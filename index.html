@@ -194,6 +194,11 @@
     color:var(--text);background:var(--card);border:1px solid var(--line-soft);
     border-radius:999px;padding:8px 14px;transition:transform .12s ease}
   .backpill:active{transform:scale(.95)}
+  /* Telegram's own chrome already gives a back affordance (its native
+     BackButton, wired in JS below) inside the real app — our in-page pill
+     would just be a redundant second one there. Keep it for plain-browser
+     use, where Telegram's chrome doesn't exist. */
+  body.in-telegram .detail-topbar{display:none}
   .detail-content{padding:14px 14px 40px}
 
   .dcard{background:var(--card);border:1px solid var(--line);border-radius:16px;
@@ -204,7 +209,7 @@
   /* Sized to match the reference app's pills 1:1 (measured off a real
      screenshot: ~14px badge in a ~30px-tall capsule, 12px label) — small,
      content-hugging chips that wrap, not stretched grid cells. */
-  .ilinks{display:flex;flex-wrap:wrap;gap:7px}
+  .ilinks{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:14px}
   .ilink{display:inline-flex;align-items:center;gap:7px;border-radius:999px;text-decoration:none;
     border:1px solid var(--line-soft);background:var(--card-2);padding:7px 11px 7px 10px;
     transition:transform .12s ease,background .12s ease;overflow:hidden}
@@ -573,16 +578,12 @@
   }
 
   const LINK_ICONS = {
-    contract: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 13h6"/><path d="M9 17h6"/></svg>',
-    pool: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2s7 7.58 7 12a7 7 0 0 1-14 0c0-4.42 7-12 7-12z"/></svg>',
     website: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a15 15 0 0 1 0 18a15 15 0 0 1 0-18z"/></svg>',
   };
-  // Real app icons, cropped directly from the actual Dexscreener,
-  // GeckoTerminal, X and Telegram app icons (not redrawn/approximated) —
-  // rendered as <img> so the badge look matches other apps exactly.
+  // Real app icons, cropped directly from the actual X and Telegram app
+  // icons (not redrawn/approximated) — rendered as <img> so the badge
+  // look matches other apps exactly.
   const LINK_IMAGES = {
-    dexscreener: "icons/dexscreener.png",
-    gecko: "icons/geckoterminal.png",
     telegram: "icons/telegram.png",
     x: "icons/x.png",
   };
@@ -593,11 +594,6 @@
       : `<span class="ibadge">${LINK_ICONS[kind]}</span>`;
     return `<a class="ilink" href="${esc(url)}" target="_blank" rel="noopener" aria-label="${esc(label)}" title="${esc(label)}">${badge}<span class="ilabel">${esc(label)}</span></a>`;
   }
-
-  function explorerUrl(addr){ return "https://tonviewer.com/" + encodeURIComponent(addr); }
-  function poolGeckoUrl(pool){ return pool ? "https://www.geckoterminal.com/ton/pools/" + encodeURIComponent(pool) : null; }
-  function poolDexscreenerUrl(pool){ return pool ? "https://dexscreener.com/ton/" + encodeURIComponent(pool) : null; }
-  function poolStonfiUrl(pool){ return pool ? "https://app.ston.fi/pools/" + encodeURIComponent(pool) : null; }
 
   function renderDetail(coin){
     const dir = coin.change24h >= 0 ? "up" : "down";
@@ -629,10 +625,6 @@
     const hasTrustData = trustChips.length > 0 || top10 != null;
 
     const iconLinks = [
-      iconLink(poolDexscreenerUrl(coin.poolAddress), "dexscreener", "Dexscreener"),
-      iconLink(poolGeckoUrl(coin.poolAddress), "gecko", "GeckoTerminal"),
-      iconLink(explorerUrl(coin.tokenAddress), "contract", "Contract"),
-      iconLink(poolStonfiUrl(coin.poolAddress), "pool", "Pool"),
       iconLink(coin.website, "website", "Website"),
       iconLink(coin.telegram ? `https://t.me/${coin.telegram}` : null, "telegram", "Telegram"),
       iconLink(coin.twitter ? `https://x.com/${coin.twitter}` : null, "x", "X"),
@@ -650,11 +642,11 @@
         <span class="addr addrtext">${esc(truncAddr(coin.tokenAddress))}</span>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>
       </div>
+      ${iconLinks.length ? `<div class="ilinks">${iconLinks.join("")}</div>` : ""}
 
       <div class="dcard">
         <h3>About</h3>
         ${coin.description ? `<p class="desc">${esc(coin.description).slice(0,320)}${coin.description.length>320?'…':''}</p>` : `<p class="desc" style="color:var(--muted)">No description available.</p>`}
-        <div class="ilinks">${iconLinks.join("")}</div>
       </div>
 
       <div class="dcard">
