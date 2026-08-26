@@ -77,6 +77,15 @@
   .iconbtn.spin svg{animation:spin .7s linear infinite}
   @keyframes spin{to{transform:rotate(360deg)}}
 
+  /* ---------- Pull to refresh ---------- */
+  .ptr{position:absolute;top:calc(env(safe-area-inset-top) + 6px);left:50%;
+    transform:translate(-50%,-50px);opacity:0;z-index:4;
+    width:34px;height:34px;border-radius:50%;background:var(--card);border:1px solid var(--line);
+    display:flex;align-items:center;justify-content:center;color:var(--ton-b);
+    box-shadow:0 6px 16px -6px rgba(0,0,0,.5)}
+  .ptr svg{width:16px;height:16px}
+  .ptr.spinning svg{animation:spin .7s linear infinite}
+
   main{padding:14px 14px 40px}
 
   /* ---------- Section header (plain — no gradient card, the app's own
@@ -253,6 +262,10 @@
     border-radius:12px;padding:14px;letter-spacing:.01em;margin-top:4px;transition:transform .12s ease}
   .buy:active{transform:scale(.98)}
   .buy:disabled{opacity:.6}
+  /* Inside real Telegram, Telegram's own MainButton is the primary CTA
+     (feels native at the bottom of the app) — the in-page button steps
+     aside so there's only one Buy affordance, not two. */
+  body.in-telegram .buy{display:none}
   .buystatus{font-size:11px;text-align:center;margin-top:8px;line-height:1.5;min-height:14px}
   .buystatus.ok{color:var(--up)}
   .buystatus.err{color:var(--down)}
@@ -270,6 +283,9 @@
 
   <!-- ===================== LIST SCREEN ===================== -->
   <div class="screen" id="screen-list">
+    <div class="ptr" id="ptr">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3"><path d="M21 12a9 9 0 1 1-2.6-6.36"/><path d="M21 3v6h-6"/></svg>
+    </div>
     <div class="topbar">
       <div class="brandrow">
         <div class="diamond"></div>
@@ -552,8 +568,10 @@
           <span class="chg tabular ${dir}">${fmtChg(coin.change24h)}</span>
         </div>
         <div class="rangerow">
+          <button class="rangepill" data-range="1h" onclick="setChartRange('1h')">1H</button>
           <button class="rangepill active" data-range="24h" onclick="setChartRange('24h')">24H</button>
           <button class="rangepill" data-range="7d" onclick="setChartRange('7d')">7D</button>
+          <button class="rangepill" data-range="30d" onclick="setChartRange('30d')">30D</button>
         </div>
         <div class="chartbox" id="chartBox"><div class="skel" style="width:100%;height:100%;border-radius:8px"></div></div>
         <div class="statgrid">
@@ -657,7 +675,12 @@
     if (chartCache[key]) { box.innerHTML = chartCache[key]; return; }
     box.innerHTML = `<div class="skel" style="width:100%;height:100%;border-radius:8px"></div>`;
     try {
-      const cfg = range === "7d" ? { timeframe: "hour", aggregate: 4, limit: 42 } : { timeframe: "hour", aggregate: 1, limit: 24 };
+      const cfg = {
+        "1h": { timeframe: "minute", aggregate: 1, limit: 60 },
+        "24h": { timeframe: "hour", aggregate: 1, limit: 24 },
+        "7d": { timeframe: "hour", aggregate: 4, limit: 42 },
+        "30d": { timeframe: "day", aggregate: 1, limit: 30 },
+      }[range] || { timeframe: "hour", aggregate: 1, limit: 24 };
       const res = await fetchJson(`${GT_BASE}/networks/${NETWORK}/pools/${coin.poolAddress}/ohlcv/${cfg.timeframe}?aggregate=${cfg.aggregate}&limit=${cfg.limit}&currency=usd`);
       const list = (res?.data?.attributes?.ohlcv_list || []).slice().sort((a, b) => a[0] - b[0]);
       if (list.length < 2) throw new Error("not enough candles yet for this pool");
@@ -704,6 +727,7 @@
     document.getElementById("screen-detail").classList.remove("active");
     document.getElementById("screen-list").classList.remove("behind");
     tg?.BackButton?.hide();
+    window.hideMainButton?.();
   };
 
   window.setSort = function(mode){
@@ -833,6 +857,55 @@
     }
   }
 
+  (function setupPullToRefresh(){
+    const el = document.getElementById("screen-list");
+    const ptr = document.getElementById("ptr");
+    if (!el || !ptr) return;
+    const THRESHOLD = 62;
+    let startY = null, pulling = false, triggered = false;
+
+    el.addEventListener("touchstart", (e) => {
+      if (el.scrollTop > 0) { startY = null; pulling = false; return; }
+      startY = e.touches[0].clientY;
+      pulling = true;
+      triggered = false;
+      ptr.style.transition = "none";
+    }, { passive: true });
+
+    el.addEventListener("touchmove", (e) => {
+      if (!pulling || startY == null) return;
+      const dy = e.touches[0].clientY - startY;
+      if (dy <= 0 || el.scrollTop > 0) { pulling = false; return; }
+      const pull = Math.min(dy * 0.5, 90);
+      const progress = Math.min(pull / THRESHOLD, 1);
+      ptr.style.opacity = String(progress);
+      ptr.style.transform = `translate(-50%, ${pull - 50}px) rotate(${progress * 180}deg)`;
+      if (pull >= THRESHOLD && !triggered) { triggered = true; tg?.HapticFeedback?.impactOccurred?.("medium"); }
+      else if (pull < THRESHOLD && triggered) { triggered = false; }
+    }, { passive: true });
+
+    el.addEventListener("touchend", () => {
+      if (!pulling) return;
+      pulling = false;
+      ptr.style.transition = "transform .25s ease, opacity .25s ease";
+      if (triggered) {
+        ptr.classList.add("spinning");
+        ptr.style.transform = "translate(-50%, 8px) rotate(0deg)";
+        ptr.style.opacity = "1";
+        load().finally(() => {
+          ptr.classList.remove("spinning");
+          ptr.style.transform = "translate(-50%, -50px)";
+          ptr.style.opacity = "0";
+        });
+      } else {
+        ptr.style.transform = "translate(-50%, -50px)";
+        ptr.style.opacity = "0";
+      }
+      startY = null;
+      triggered = false;
+    });
+  })();
+
   load();
 </script>
 
@@ -870,14 +943,36 @@
 
   const manifestUrl = new URL("tonconnect-manifest.json", window.location.href).toString();
 
+  // Telegram's own bottom-bar action button — feels native when this app is
+  // actually opened inside Telegram (initData is only populated in that
+  // case; a plain browser hitting this page directly won't have it, so the
+  // in-page Buy button stays the primary CTA there instead).
+  const tgApp = window.Telegram?.WebApp;
+  const inTelegram = !!(tgApp && tgApp.initData);
+  if (inTelegram) document.body.classList.add("in-telegram");
+
   let tonConnectUI = null;
   try {
-    tonConnectUI = new window.TON_CONNECT_UI.TonConnectUI({
+    const TC = window.TON_CONNECT_UI;
+    tonConnectUI = new TC.TonConnectUI({
       manifestUrl,
       buttonRootId: "ton-connect-button",
+      // Match the app's own TON-blue accent instead of TonConnect's default
+      // styling. Their docs advise against CSS overrides of the widget, so
+      // this uses their supported theming API instead.
+      uiPreferences: {
+        theme: TC.THEME.DARK,
+        borderRadius: "s",
+        colorsSet: { [TC.THEME.DARK]: { connectButton: { background: "#0098EA" } } },
+      },
     });
   } catch (e) {
     console.error("TonConnect UI failed to initialize:", e);
+  }
+
+  if (inTelegram && tgApp?.MainButton) {
+    tgApp.MainButton.setParams({ color: "#0098EA", text_color: "#03131f" });
+    tgApp.MainButton.onClick(() => window.handleBuy?.());
   }
 
   const tonClient = new Client({ endpoint: "https://toncenter.com/api/v2/jsonRPC" });
@@ -894,24 +989,40 @@
     if (input) input.value = v;
   };
 
-  window.refreshBuyUi = function(){
+  // Keeps the in-page Buy button and Telegram's MainButton (when present) in
+  // sync with each other — same label, same enabled/progress state.
+  function setBuyButtonsText(text, opts = {}){
     const btn = document.getElementById("buyBtn");
-    if (!btn) return;
-    if (!tonConnectUI) { btn.textContent = "Wallet unavailable"; btn.disabled = true; return; }
-    btn.disabled = false;
+    if (btn) { btn.textContent = text; btn.disabled = !!opts.disabled; }
+    if (inTelegram && tgApp?.MainButton) {
+      tgApp.MainButton.setText(text);
+      if (opts.progress) tgApp.MainButton.showProgress(false); else tgApp.MainButton.hideProgress();
+      if (opts.disabled) tgApp.MainButton.disable(); else tgApp.MainButton.enable();
+    }
+  }
+
+  function syncMainButtonVisibility(){
+    if (!inTelegram || !tgApp?.MainButton) return;
+    const detailActive = document.getElementById("screen-detail")?.classList.contains("active");
+    if (detailActive) tgApp.MainButton.show(); else tgApp.MainButton.hide();
+  }
+  window.syncMainButton = syncMainButtonVisibility;
+  window.hideMainButton = function(){ if (inTelegram) tgApp?.MainButton?.hide(); };
+
+  window.refreshBuyUi = function(){
+    if (!tonConnectUI) { setBuyButtonsText("Wallet unavailable", { disabled: true }); syncMainButtonVisibility(); return; }
     const coin = window.currentDetailCoin;
-    btn.textContent = tonConnectUI.connected
-      ? `Buy $${coin ? coin.symbol : ""}`
-      : "Connect wallet to buy";
+    const label = tonConnectUI.connected ? `Buy $${coin ? coin.symbol : ""}` : "Connect wallet to buy";
+    setBuyButtonsText(label, { disabled: false });
+    syncMainButtonVisibility();
   };
 
   tonConnectUI?.onStatusChange(() => window.refreshBuyUi?.());
 
   window.handleBuy = async function(){
     const coin = window.currentDetailCoin;
-    const btn = document.getElementById("buyBtn");
     const statusEl = document.getElementById("buyStatus");
-    if (!coin || !btn || !statusEl || !tonConnectUI) return;
+    if (!coin || !statusEl || !tonConnectUI) return;
 
     if (!tonConnectUI.connected) {
       tonConnectUI.openModal();
@@ -927,9 +1038,7 @@
       return;
     }
 
-    const originalLabel = btn.textContent;
-    btn.disabled = true;
-    btn.textContent = "Preparing swap…";
+    setBuyButtonsText("Preparing swap…", { disabled: true, progress: true });
     statusEl.textContent = "";
     statusEl.className = "buystatus";
 
@@ -963,7 +1072,7 @@
         payload: txParams.body.toBoc().toString("base64"),
       };
 
-      btn.textContent = "Confirm in your wallet…";
+      setBuyButtonsText("Confirm in your wallet…", { disabled: true, progress: true });
       await tonConnectUI.sendTransaction({
         validUntil: Math.floor(Date.now() / 1000) + 300,
         messages: [message],
@@ -971,15 +1080,14 @@
 
       statusEl.textContent = "Sent — check your wallet for confirmation.";
       statusEl.className = "buystatus ok";
-      window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred?.("success");
+      tgApp?.HapticFeedback?.notificationOccurred?.("success");
     } catch (e) {
       console.error("Swap failed:", e);
       statusEl.textContent = (e?.message || "Swap failed") + " — try the direct STON.fi link below.";
       statusEl.className = "buystatus err";
-      window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred?.("error");
+      tgApp?.HapticFeedback?.notificationOccurred?.("error");
     } finally {
-      btn.textContent = originalLabel;
-      btn.disabled = false;
+      window.refreshBuyUi?.();
     }
   };
 </script>
