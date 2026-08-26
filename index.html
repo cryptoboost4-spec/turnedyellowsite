@@ -205,6 +205,16 @@
   .portfolio-head{text-align:center;padding:22px 14px}
   .portfolio-head .k{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
   .portfolio-total{font-size:32px;font-weight:700;letter-spacing:-.01em;margin-top:6px}
+  .unlisted-row{opacity:.6}
+  .unlisted-toggle{margin-top:14px}
+  .unlisted-toggle summary{cursor:pointer;font-size:12px;color:var(--muted);
+    list-style:none;padding:10px 2px}
+  .unlisted-toggle summary::-webkit-details-marker{display:none}
+  .unlisted-toggle summary::before{content:"▸ ";display:inline-block;transition:transform .15s ease}
+  .unlisted-toggle[open] summary::before{transform:rotate(90deg)}
+  .unlisted-toggle .unlisted-note{font-size:10.5px;color:var(--muted);line-height:1.5;
+    padding:0 2px 10px}
+  .unlisted-toggle .spotlight{margin-bottom:8px}
 
   /* ---------- Detail screen ---------- */
   /* No in-page back button — Telegram's own native BackButton (wired in JS
@@ -1052,13 +1062,37 @@
       <${tag} class="spotlight"${onclick}>
         <div class="spot-media">${img}</div>
         <div class="spot-body">
-          <div class="spot-top"><span class="spot-name">${esc(h.name)}</span></div>
+          <div class="spot-top">
+            <span class="spot-name">${esc(h.name)}</span>
+            ${isTon ? '<span class="spot-badge">Gas</span>' : ""}
+          </div>
           <div class="spot-ticker">${fmtAmount(h.amount)} $${esc(h.symbol)}</div>
         </div>
         <div class="spot-stats">
           <div class="spot-price tabular">${h.usd > 0 ? fmtUsd(h.usd) : "—"}</div>
         </div>
       </${tag}>`;
+  }
+
+  // Compact row for `unlisted` holdings (see loadPortfolio's comment) — no
+  // $ column, since there's no real price to show, and a "Flagged" badge
+  // when STON.fi has explicitly marked the asset as risky rather than just
+  // priceless. Not clickable: nothing to trade, no detail page to open.
+  function unlistedRow(h){
+    const img = h.imageUrl
+      ? `<img src="${esc(h.imageUrl)}" loading="lazy" alt="" onerror="this.parentElement.innerHTML='<div class=fallback>${esc((h.symbol||'?')[0])}</div>'"/>`
+      : `<div class="fallback">${esc((h.symbol||"?")[0])}</div>`;
+    return `
+      <div class="spotlight unlisted-row">
+        <div class="spot-media">${img}</div>
+        <div class="spot-body">
+          <div class="spot-top">
+            <span class="spot-name">${esc(h.name)}</span>
+            ${h.flagged ? '<span class="spot-badge warn">Flagged</span>' : ""}
+          </div>
+          <div class="spot-ticker">${fmtAmount(h.amount)} $${esc(h.symbol)}</div>
+        </div>
+      </div>`;
   }
 
   async function renderPortfolio(){
@@ -1098,12 +1132,32 @@
       <div class="dcard portfolio-head">
         <div class="k">Portfolio value</div>
         <div class="portfolio-total tabular">${fmtUsd(data.totalUsd)}</div>
-      </div>`);
-    if (!data.holdings.length) {
+        ${data.address ? `
+        <button type="button" class="ca-row" onclick="window.copyAddr?.('${esc(data.address)}', this)">
+          <span class="k">Wallet</span>
+          <span class="addr addrtext">${esc(truncAddr(data.address))}</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>
+        </button>` : ""}
+      </div>
+      <div class="feenote">Non-custodial — this is your wallet, held in your connected app.<br/>TON Board never has access to your funds.</div>`);
+
+    if (!data.holdings.length && !data.unlisted.length) {
       body.innerHTML = `<div class="state"><p>No tokens yet — buy your first one from Trending.</p></div>`;
       return;
     }
-    body.innerHTML = data.holdings.map(portfolioRow).join("");
+
+    const holdingsHtml = data.holdings.length
+      ? data.holdings.map(portfolioRow).join("")
+      : `<div class="state"><p>No tokens yet — buy your first one from Trending.</p></div>`;
+
+    const unlistedHtml = data.unlisted.length ? `
+      <details class="unlisted-toggle">
+        <summary>Other tokens (${data.unlisted.length})</summary>
+        <div class="unlisted-note">No market data — often unsolicited airdrops. Kept separate from your real holdings above.</div>
+        ${data.unlisted.map(unlistedRow).join("")}
+      </details>` : "";
+
+    body.innerHTML = holdingsHtml + unlistedHtml;
   }
 
   window.setSort = function(mode){

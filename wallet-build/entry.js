@@ -16,7 +16,7 @@
 // which writes ../wallet-bundle.js directly (commit that file too).
 
 import "./polyfills.js";
-import { TonConnectUI, THEME } from "@tonconnect/ui";
+import { TonConnectUI, THEME, toUserFriendlyAddress } from "@tonconnect/ui";
 import { dexFactory, Client } from "@ston-fi/sdk";
 import { StonApiClient } from "@ston-fi/api";
 
@@ -196,16 +196,32 @@ window.connectWallet = function () {
   tonConnectUI?.openModal();
 };
 
+// STON.fi's own risk tags — same list the Trust signals card on the detail
+// page treats as "don't trust this" (see index.html's loadStonfiTrustSignals).
+// Reused here so a flagged jetton gets the same treatment in the wallet.
+const RISK_TAGS = ["asset:honeypot", "asset:suspicious", "asset:fake"];
+
 // Every non-zero balance in the wallet (including native TON), priced in
 // USD from STON.fi's own feed — powers the Portfolio screen. Separate
 // from loadBalance()/balanceState above, which only track the single
 // asset relevant to the current Buy/Sell screen.
+//
+// Splits into two buckets rather than one flat list: TON wallets
+// routinely accumulate unsolicited "airdropped" jettons (spam tokens with
+// no real liquidity, sometimes carrying phishing links in the name) —
+// mixing those into a new user's real holdings, sorted by the same $
+// column, makes the screen both confusing and a bigger phishing surface.
+// Anything STON.fi has no price for, or has explicitly flagged
+// (blacklisted / honeypot / suspicious / fake), goes to `unlisted`
+// instead of `holdings` and is excluded from `totalUsd`.
 window.loadPortfolio = async function () {
   if (!apiClient || !tonConnectUI?.connected) return null;
   try {
-    const address = tonConnectUI.wallet?.account?.address;
-    const assets = await fetchWalletAssets(address);
+    const rawAddress = tonConnectUI.wallet?.account?.address;
+    const address = rawAddress ? toUserFriendlyAddress(rawAddress) : null;
+    const assets = await fetchWalletAssets(rawAddress);
     const holdings = [];
+    const unlisted = [];
     let totalUsd = 0;
     for (const a of assets) {
       if (a.kind === "NotAnAsset" || !a.balance || a.balance === "0") continue;
@@ -213,8 +229,10 @@ window.loadPortfolio = async function () {
       const amount = Number(a.balance) / Math.pow(10, decimals);
       const price = Number(a.dexPriceUsd ?? a.thirdPartyPriceUsd ?? 0);
       const usd = amount * price;
-      totalUsd += usd;
-      holdings.push({
+      const isTon = a.kind === "Ton";
+      const tags = a.tags || [];
+      const flagged = !isTon && (!!a.blacklisted || tags.some((t) => RISK_TAGS.includes(t)));
+      const item = {
         address: a.contractAddress,
         kind: a.kind,
         symbol: a.symbol,
@@ -222,10 +240,20 @@ window.loadPortfolio = async function () {
         imageUrl: a.imageUrl || null,
         amount,
         usd,
-      });
+        flagged,
+      };
+      if (!isTon && (flagged || !(price > 0))) {
+        unlisted.push(item);
+      } else {
+        totalUsd += usd;
+        holdings.push(item);
+      }
     }
-    holdings.sort((a, b) => b.usd - a.usd);
-    return { totalUsd, holdings };
+    // TON pinned first — it's the gas asset every other trade depends on,
+    // not just another line item to rank by $ value.
+    holdings.sort((a, b) => (a.kind === "Ton" ? -1 : b.kind === "Ton" ? 1 : b.usd - a.usd));
+    unlisted.sort((a, b) => a.name.localeCompare(b.name));
+    return { totalUsd, holdings, unlisted, address };
   } catch (e) {
     console.error("Portfolio load failed:", e, "response body:", e?.data);
     return null;
