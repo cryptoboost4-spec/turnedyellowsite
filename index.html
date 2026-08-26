@@ -1013,8 +1013,13 @@
   let dexFactory, Client, StonApiClient, tonClient, apiClient;
   let sdkLoadError = null;
   try {
-    const sdk = await import("https://esm.sh/@ston-fi/sdk@2.7.0");
-    const api = await import("https://esm.sh/@ston-fi/api@0.32.0");
+    // jsdelivr's +esm endpoint (a CJS→ESM transform pipeline, documented at
+    // jsdelivr.com/esm) — switched from esm.sh after a live test showed
+    // "Failed to fetch dynamically imported module" for this exact package
+    // there. Different resolution engine, worth trying; if this also
+    // fails, the error text will say so and point at a different fix.
+    const sdk = await import("https://cdn.jsdelivr.net/npm/@ston-fi/sdk@2.7.0/+esm");
+    const api = await import("https://cdn.jsdelivr.net/npm/@ston-fi/api@0.32.0/+esm");
     dexFactory = sdk.dexFactory;
     Client = sdk.Client;
     StonApiClient = api.StonApiClient;
