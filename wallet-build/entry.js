@@ -106,6 +106,74 @@ function toNanoTon(amountStr) {
   return Math.round(n * 1e9).toString();
 }
 
+// ---- Debug panel: shows the actual request sent and response received
+// for the last swap attempt, so a failure can be diagnosed from what's
+// really on the wire instead of guessing from an error message alone. ----
+let debugLog = [];
+function resetDebugLog() {
+  debugLog = [];
+  renderDebugLog();
+}
+function logDebug(label, value) {
+  debugLog.push([label, value]);
+  renderDebugLog();
+}
+function renderDebugLog() {
+  const el = document.getElementById("swapDebugBody");
+  if (!el) return;
+  el.textContent = debugLog
+    .map(([label, value]) => {
+      let str;
+      try {
+        str = typeof value === "string" ? value : JSON.stringify(value, null, 2);
+      } catch {
+        str = String(value);
+      }
+      return `── ${label} ──\n${str}`;
+    })
+    .join("\n\n") || "(nothing sent yet — enter an amount)";
+}
+window.toggleSwapDebug = function () {
+  const body = document.getElementById("swapDebugBody");
+  const btn = document.getElementById("swapDebugToggle");
+  if (!body || !btn) return;
+  const open = body.hidden;
+  body.hidden = !open;
+  btn.textContent = (open ? "▾" : "▸") + " Debug: request & response";
+};
+
+function buildSimulateUrl(offerAddress, askAddress, units) {
+  const p = new URLSearchParams({
+    offer_address: offerAddress,
+    ask_address: askAddress,
+    slippage_tolerance: "0.01",
+    units,
+  });
+  return "https://api.ston.fi/v1/swap/simulate?" + p.toString();
+}
+
+// Shared by the live preview and the real Buy flow — both hit the exact
+// same STON.fi endpoint, so there's one place building the request and
+// logging it to the debug panel instead of two copies that could drift.
+async function runSimulate(coin, nano) {
+  const url = buildSimulateUrl(TON_PSEUDO_ADDRESS, coin.tokenAddress, nano);
+  try {
+    const sim = await apiClient.simulateSwap({
+      offerAddress: TON_PSEUDO_ADDRESS,
+      askAddress: coin.tokenAddress,
+      offerUnits: nano,
+      slippageTolerance: "0.01",
+    });
+    logDebug("Request", "POST " + url);
+    logDebug("Response 200", sim);
+    return sim;
+  } catch (e) {
+    logDebug("Request", "POST " + url);
+    logDebug(`Response ${e?.status ?? "?"}`, e?.data ?? e?.message ?? String(e));
+    throw e;
+  }
+}
+
 window.setBuyAmount = function (v) {
   const input = document.getElementById("buyAmount");
   if (input) input.value = v;
@@ -142,13 +210,9 @@ window.previewSwap = function () {
 
   const debounceId = setTimeout(async () => {
     if (myToken !== previewToken) return; // a newer keystroke superseded this one
+    resetDebugLog();
     try {
-      const sim = await apiClient.simulateSwap({
-        offerAddress: TON_PSEUDO_ADDRESS,
-        askAddress: coin.tokenAddress,
-        offerUnits: nano,
-        slippageTolerance: "0.01",
-      });
+      const sim = await runSimulate(coin, nano);
       if (myToken !== previewToken) return;
 
       const decimals = coin.decimals ?? 9;
@@ -270,13 +334,9 @@ window.handleBuy = async function () {
   statusEl.textContent = "";
   statusEl.className = "buystatus";
 
+  resetDebugLog();
   try {
-    const simulationResult = await apiClient.simulateSwap({
-      offerAddress: TON_PSEUDO_ADDRESS,
-      askAddress: coin.tokenAddress,
-      offerUnits: nano,
-      slippageTolerance: "0.01",
-    });
+    const simulationResult = await runSimulate(coin, nano);
 
     const routerInfo = simulationResult.router;
     const dexContracts = dexFactory(routerInfo);
@@ -299,17 +359,20 @@ window.handleBuy = async function () {
       amount: txParams.value.toString(),
       payload: txParams.body.toBoc().toString("base64"),
     };
+    logDebug("Built transaction (for wallet)", message);
 
     setBuyButtonsText("Confirm in your wallet…", { disabled: true, progress: true });
-    await tonConnectUI.sendTransaction({
+    const sendResult = await tonConnectUI.sendTransaction({
       validUntil: Math.floor(Date.now() / 1000) + 300,
       messages: [message],
     });
+    logDebug("Wallet response", sendResult);
 
     statusEl.textContent = "Sent — check your wallet for confirmation.";
     statusEl.className = "buystatus ok";
     tgApp?.HapticFeedback?.notificationOccurred?.("success");
   } catch (e) {
+    logDebug("Error", describeError(e));
     console.error("Swap failed:", e, "response body:", e?.data);
     statusEl.textContent = describeError(e) + " — try the direct STON.fi link below.";
     statusEl.className = "buystatus err";
